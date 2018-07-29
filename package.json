@@ -1,0 +1,19 @@
+{
+  "name": "omok-express",
+  "version": "1.0.0",
+  "description": "express driven api for omok multiplayer game",
+  "main": "index.js",
+  "scripts": {
+    "tsc": "tsc"
+  },
+  "author": "Duc Anh Phi",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.16.3",
+    "typescript": "^2.9.2"
+  },
+  "devDependencies": {
+    "@types/es6-shim": "^0.31.37",
+    "@types/express": "^4.16.0"
+  }
+}
