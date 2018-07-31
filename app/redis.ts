@@ -10,6 +10,7 @@ export const sub = client.duplicate();
 const hmsetAsync = promisify(client.hmset).bind(client);
 const hsetAsync = promisify(client.hset).bind(client);
 const hgetAsync = promisify(client.hget).bind(client);
+const hgetAllAsync = promisify(client.hgetall).bind(client);
 const delAsync = promisify(client.del).bind(client);
 const saddAsync = promisify(client.sadd).bind(client);
 const sremAsync = promisify(client.srem).bind(client);
@@ -19,9 +20,20 @@ client.on("connect", () => {
   console.log("connected to redis");
 });
 
-export const createGame = async (sessionId: string, userId: string) => {
+export const createGame = async (
+  sessionId: string,
+  userId: string,
+  user: { username: string; points: number },
+  time: number
+) => {
   const gameId = uuidv4();
-  const initialGame = { player1: userId, player2: "" };
+  const initialGame = {
+    player1: userId,
+    player2: "",
+    player1Name: user.username,
+    player1Points: user.points,
+    time
+  };
   return Promise.all([
     hmsetAsync(gameId, initialGame),
     hmsetAsync(sessionId, { userId, gameId }),
@@ -84,4 +96,8 @@ export const subscribeGameList = () => {
 
 export const unsubscribeGameList = () => {
   sub.unsubscribe("gameListChange");
+};
+
+export const getGame = (gameId: string) => {
+  return hgetAllAsync(gameId);
 };

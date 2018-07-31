@@ -10,8 +10,21 @@ const io = socketIo(server);
 server.listen(3000);
 io.of("/gameList").on("connection", socket => {
   const subscription = redis.subscribeGameList();
-  subscription.on("message", async (channel: string, message: string) => {
-    socket.emit("openGames", await redis.getOpenGames());
+  subscription.on("message", async (channel, message) => {
+    console.log(message);
+    try {
+      const gameIds = await redis.getOpenGames();
+      const games = await Promise.all(
+        gameIds.map((gameId: string) =>
+          redis.getGame(gameId).then((game: any) => ({ ...game, gameId }))
+        )
+      );
+      console.log("here are the games");
+      console.log(games);
+      socket.emit("openGames", games);
+    } catch (e) {
+      console.log(e);
+    }
   });
   console.log("connected to gameList");
   socket.on("disconnect", () => {
@@ -30,9 +43,18 @@ io.of("/game").on("connection", socket => {
     redis.leaveGame(socket.id);
   });
 
-  socket.on("createGame", (params: { userId: string }) => {
-    redis.createGame(socket.id, params.userId).then(initialGame => {
-      socket.emit("gameCreated", initialGame);
-    });
-  });
+  socket.on(
+    "createGame",
+    (params: {
+      userId: string;
+      user: { username: string; points: number };
+      time: number;
+    }) => {
+      redis
+        .createGame(socket.id, params.userId, params.user, params.time)
+        .then(initialGame => {
+          socket.emit("gameCreated", initialGame);
+        });
+    }
+  );
 });
