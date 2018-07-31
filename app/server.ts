@@ -35,8 +35,6 @@ io.of("/gameList").on("connection", socket => {
 
 io.of("/game").on("connection", socket => {
   console.log("connected to game");
-  redis.clearAll();
-  console.log("clean");
   console.log("user connected", socket.id);
   socket.on("disconnect", () => {
     console.log("user disconnected");
