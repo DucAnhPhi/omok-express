@@ -4,7 +4,7 @@
   "description": "express driven api for omok multiplayer game",
   "main": "index.js",
   "scripts": {
-    "start": "rm -rf build/ && tsc && node build/app/server.js"
+    "start": "rm -rf build/ && tsc && node build/server.js"
   },
   "author": "Duc Anh Phi",
   "license": "ISC",
