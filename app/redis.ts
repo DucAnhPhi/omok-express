@@ -15,6 +15,7 @@ const delAsync = promisify(client.del).bind(client);
 const saddAsync = promisify(client.sadd).bind(client);
 const sremAsync = promisify(client.srem).bind(client);
 const smembersAsync = promisify(client.smembers).bind(client);
+const hincrbyAsync = promisify(client.hincrby).bind(client);
 
 client.on("connect", () => {
   console.log("connected to redis");
@@ -28,11 +29,18 @@ export const createGame = async (
 ) => {
   const gameId = uuidv4();
   const initialGame = {
-    player1: userId,
+    player1: sessionId,
     player2: "",
     player1Name: user.username,
     player1Points: user.points,
-    time
+    player1Ready: "",
+    player2Ready: "",
+    player1Time: time * 60,
+    player2Time: time * 60,
+    time,
+    gameStarted: "",
+    turn: sessionId,
+    gameId
   };
   return Promise.all([
     hmsetAsync(gameId, initialGame),
@@ -44,18 +52,20 @@ export const createGame = async (
   });
 };
 
-export const matchGame = (
+export const joinGame = async (
   sessionId: string,
   userId: string,
   gameId: string
 ) => {
+  const game = await getGame(gameId);
+  game.player2 = sessionId;
   return Promise.all([
-    hsetAsync(gameId, { player2: userId }),
+    hmsetAsync(gameId, game),
     hmsetAsync(sessionId, { userId, gameId }),
     sremAsync("openGames", gameId)
   ]).then(() => {
     pub.publish("gameListChange", "game matched");
-    return gameId;
+    return game;
   });
 };
 
@@ -69,12 +79,31 @@ export const leaveGame = async (sessionId: string) => {
     });
     delAsync(leavingGame);
   } else {
-    hsetAsync(leavingGame, { player2: "" });
+    hsetAsync(leavingGame, "player2", "");
     saddAsync("openGames", leavingGame).then(() => {
       pub.publish("gameListChange", "player2 left");
     });
   }
   delAsync(sessionId);
+};
+
+export const checkPlayersReady = async (gameId: string, isPlayer1: boolean) => {
+  const player1Ready = await hgetAsync(gameId, "player1Ready");
+  const player2Ready = await hgetAsync(gameId, "player2Ready");
+  if (isPlayer1) {
+    if (player2Ready === "1") {
+      return true;
+    } else {
+      hsetAsync(gameId, "player1Ready", "1");
+    }
+  } else {
+    if (player1Ready === "1") {
+      return true;
+    } else {
+      hsetAsync(gameId, "player2Ready", "1");
+    }
+  }
+  return false;
 };
 
 export const getOpenGames = () => {
@@ -100,4 +129,28 @@ export const unsubscribeGameList = () => {
 
 export const getGame = (gameId: string) => {
   return hgetAllAsync(gameId);
+};
+
+export const startGame = (gameId: string) => {
+  return hsetAsync(gameId, "gameStarted", "1");
+};
+
+export const checkIsPlayer1 = async (sessionId: string, gameId: string) => {
+  const player1 = await hgetAsync(gameId, "player1");
+  if (sessionId === player1) {
+    return true;
+  }
+  return false;
+};
+
+export const tick = async (gameId: string, isPlayer1: boolean) => {
+  if (isPlayer1) {
+    return hincrbyAsync(gameId, "player1Time", -1);
+  } else {
+    return hincrbyAsync(gameId, "player2Time", -1);
+  }
+};
+
+export const getPlayer1 = (gameId: string) => {
+  return hgetAsync(gameId, "player1");
 };
