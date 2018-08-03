@@ -44,13 +44,9 @@ io.of("/game").on("connection", socket => {
 
   socket.on(
     "createGame",
-    (params: {
-      userId: string;
-      user: { username: string; points: number };
-      time: number;
-    }) => {
+    (params: { user: { username: string; points: number }; time: number }) => {
       redis
-        .createGame(socket.id, params.userId, params.user, params.time)
+        .createGame(socket.id, params.user, params.time)
         .then(initialGame => {
           console.log(initialGame.gameId);
           socket.join(initialGame.gameId);
@@ -59,19 +55,26 @@ io.of("/game").on("connection", socket => {
     }
   );
 
-  socket.on("joinGame", (params: { userId: string; gameId: string }) => {
-    redis.joinGame(socket.id, params.userId, params.gameId).then(game => {
-      console.log(params.gameId);
-      socket.join(params.gameId);
-      socket.emit("gameJoined", game);
-    });
-  });
+  socket.on(
+    "joinGame",
+    (params: {
+      user: { username: string; points: number };
+      gameId: string;
+    }) => {
+      redis.joinGame(socket.id, params.user, params.gameId).then(game => {
+        console.log(params.gameId);
+        socket.join(params.gameId);
+        io.of("/game")
+          .to(params.gameId)
+          .emit("gameJoined", game);
+      });
+    }
+  );
 
   socket.on("playerReady", async (params: { gameId: string }) => {
     const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
     const bothReady = await redis.checkPlayersReady(params.gameId, isPlayer1);
     if (bothReady) {
-      const player1 = await redis.getPlayer1(params.gameId);
       // start game
       redis.startGame(params.gameId).then(() => {
         console.log("gameStarted");

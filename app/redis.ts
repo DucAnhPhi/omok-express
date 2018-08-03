@@ -23,17 +23,18 @@ client.on("connect", () => {
 
 export const createGame = async (
   sessionId: string,
-  userId: string,
   user: { username: string; points: number },
   time: number
 ) => {
   const gameId = uuidv4();
   const initialGame = {
     player1: sessionId,
-    player2: "",
     player1Name: user.username,
     player1Points: user.points,
     player1Ready: "",
+    player2: "",
+    player2Name: "",
+    player2Points: "",
     player2Ready: "",
     player1Time: time * 60,
     player2Time: time * 60,
@@ -44,7 +45,7 @@ export const createGame = async (
   };
   return Promise.all([
     hmsetAsync(gameId, initialGame),
-    hmsetAsync(sessionId, { userId, gameId }),
+    hsetAsync(sessionId, "gameId", gameId),
     saddAsync("openGames", gameId)
   ]).then(() => {
     pub.publish("gameListChange", "game created");
@@ -54,14 +55,17 @@ export const createGame = async (
 
 export const joinGame = async (
   sessionId: string,
-  userId: string,
+  user: { username: string; points: number },
   gameId: string
 ) => {
   const game = await getGame(gameId);
   game.player2 = sessionId;
+  game.player2Name = user.username;
+  game.player2Points = user.points;
+  console.log(game);
   return Promise.all([
     hmsetAsync(gameId, game),
-    hmsetAsync(sessionId, { userId, gameId }),
+    hsetAsync(sessionId, "gameId", gameId),
     sremAsync("openGames", gameId)
   ]).then(() => {
     pub.publish("gameListChange", "game matched");
@@ -71,9 +75,8 @@ export const joinGame = async (
 
 export const leaveGame = async (sessionId: string) => {
   const leavingGame = await hgetAsync(sessionId, "gameId");
-  const leavingPlayer = await hgetAsync(sessionId, "userId");
   const player1 = await hgetAsync(leavingGame, "player1");
-  if (player1 === leavingPlayer) {
+  if (player1 === sessionId) {
     sremAsync("openGames", leavingGame).then(() => {
       pub.publish("gameListChange", "game deleted");
     });
