@@ -9,6 +9,8 @@ export const sub = client.duplicate();
 // convert redis commands to promises
 const hmsetAsync = promisify(client.hmset).bind(client);
 const hsetAsync = promisify(client.hset).bind(client);
+const setAsync = promisify(client.set).bind(client);
+const getAsync = promisify(client.get).bind(client);
 const hgetAsync = promisify(client.hget).bind(client);
 const hgetAllAsync = promisify(client.hgetall).bind(client);
 const delAsync = promisify(client.del).bind(client);
@@ -22,30 +24,30 @@ client.on("connect", () => {
 });
 
 export const createGame = async (
-  sessionId: string,
+  socketId: string,
   user: { username: string; points: number },
-  time: number
+  timeMode: number
 ) => {
   const gameId = uuidv4();
   const initialGame = {
-    player1: sessionId,
+    player1: socketId,
     player1Name: user.username,
     player1Points: user.points,
-    player1Ready: "",
+    player1Ready: false,
+    player1Time: timeMode * 60,
     player2: "",
     player2Name: "",
     player2Points: "",
-    player2Ready: "",
-    player1Time: time * 60,
-    player2Time: time * 60,
-    time,
-    gameStarted: "",
-    turn: sessionId,
+    player2Ready: false,
+    player2Time: timeMode * 60,
+    timeMode,
+    playing: false,
+    turn: socketId,
     gameId
   };
   return Promise.all([
     hmsetAsync(gameId, initialGame),
-    hsetAsync(sessionId, "gameId", gameId),
+    setAsync(socketId, gameId),
     saddAsync("openGames", gameId)
   ]).then(() => {
     pub.publish("gameListChange", "game created");
@@ -54,18 +56,18 @@ export const createGame = async (
 };
 
 export const joinGame = async (
-  sessionId: string,
+  socketId: string,
   user: { username: string; points: number },
   gameId: string
 ) => {
-  const game = await getGame(gameId);
-  game.player2 = sessionId;
+  const game = await getGameById(gameId);
+  game.player2 = socketId;
   game.player2Name = user.username;
   game.player2Points = user.points;
   console.log(game);
   return Promise.all([
     hmsetAsync(gameId, game),
-    hsetAsync(sessionId, "gameId", gameId),
+    setAsync(socketId, gameId),
     sremAsync("openGames", gameId)
   ]).then(() => {
     pub.publish("gameListChange", "game matched");
@@ -73,21 +75,57 @@ export const joinGame = async (
   });
 };
 
-export const leaveGame = async (sessionId: string) => {
-  const leavingGame = await hgetAsync(sessionId, "gameId");
-  const player1 = await hgetAsync(leavingGame, "player1");
-  if (player1 === sessionId) {
-    sremAsync("openGames", leavingGame).then(() => {
-      pub.publish("gameListChange", "game deleted");
-    });
-    delAsync(leavingGame);
+export const leaveGame = async (socketId: string) => {
+  const leavingGameId = await getGameIdBySocketId(socketId);
+  const isPlayer1 = await checkIsPlayer1(socketId, leavingGameId);
+  const leavingGame = await getGameById(leavingGameId);
+  if (isPlayer1) {
+    if (leavingGame.player2) {
+      // if there is player2, make player2 to player1
+      const updatedGameProps = {
+        player1: leavingGame.player2,
+        player1Name: leavingGame.player2Name,
+        player1Points: leavingGame.player2Points,
+        player1Time: leavingGame.timeMode * 60,
+        player1Ready: false,
+        player2: "",
+        player2Name: "",
+        player2Points: "",
+        player2Ready: false,
+        player2Time: leavingGame.timeMode * 60,
+        playing: false,
+        turn: leavingGame.player2
+      };
+      hmsetAsync(leavingGameId, updatedGameProps).then(() => {
+        saddAsync("openGames", leavingGameId).then(() => {
+          pub.publish("gameListChange", "player2 is now player1");
+        });
+      });
+    } else {
+      // if there is no other player delete game
+      sremAsync("openGames", leavingGameId).then(() => {
+        pub.publish("gameListChange", "game deleted");
+      });
+      delAsync(leavingGameId);
+    }
   } else {
-    hsetAsync(leavingGame, "player2", "");
-    saddAsync("openGames", leavingGame).then(() => {
-      pub.publish("gameListChange", "player2 left");
+    const updatedGameProps = {
+      player2: "",
+      player2Name: "",
+      player2Points: "",
+      player2Ready: false,
+      player1Time: leavingGame.timeMode * 60,
+      player2Time: leavingGame.timeMode * 60,
+      playing: false,
+      turn: leavingGame.player1
+    };
+    hmsetAsync(leavingGameId, updatedGameProps).then(() => {
+      saddAsync("openGames", leavingGameId).then(() => {
+        pub.publish("gameListChange", "player2 left");
+      });
     });
   }
-  delAsync(sessionId);
+  delAsync(socketId);
 };
 
 export const checkPlayersReady = async (gameId: string, isPlayer1: boolean) => {
@@ -130,17 +168,21 @@ export const unsubscribeGameList = () => {
   sub.unsubscribe("gameListChange");
 };
 
-export const getGame = (gameId: string) => {
+export const getGameById = (gameId: string) => {
   return hgetAllAsync(gameId);
 };
 
-export const startGame = (gameId: string) => {
-  return hsetAsync(gameId, "gameStarted", "1");
+export const getGameIdBySocketId = (socketId: string) => {
+  return getAsync(socketId);
 };
 
-export const checkIsPlayer1 = async (sessionId: string, gameId: string) => {
+export const startGame = (gameId: string) => {
+  return hsetAsync(gameId, "playing", true);
+};
+
+export const checkIsPlayer1 = async (socketId: string, gameId: string) => {
   const player1 = await hgetAsync(gameId, "player1");
-  if (sessionId === player1) {
+  if (socketId === player1) {
     return true;
   }
   return false;

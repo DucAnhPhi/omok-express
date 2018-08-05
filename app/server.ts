@@ -17,7 +17,7 @@ io.of("/gameList").on("connection", socket => {
       const gameIds = await redis.getOpenGames();
       const games = await Promise.all(
         gameIds.map((gameId: string) =>
-          redis.getGame(gameId).then((game: any) => ({ ...game, gameId }))
+          redis.getGameById(gameId).then((game: any) => ({ ...game, gameId }))
         )
       );
       console.log("here are the games");
@@ -40,13 +40,19 @@ io.of("/game").on("connection", socket => {
   socket.on("disconnect", () => {
     console.log("user disconnected");
     redis.leaveGame(socket.id);
+    redis.getGameIdBySocketId(socket.id).then((gameId: string) => {
+      socket.to(gameId).emit("playerLeft");
+    });
   });
 
   socket.on(
     "createGame",
-    (params: { user: { username: string; points: number }; time: number }) => {
+    (params: {
+      user: { username: string; points: number };
+      timeMode: number;
+    }) => {
       redis
-        .createGame(socket.id, params.user, params.time)
+        .createGame(socket.id, params.user, params.timeMode)
         .then(initialGame => {
           console.log(initialGame.gameId);
           socket.join(initialGame.gameId);
@@ -89,11 +95,11 @@ io.of("/game").on("connection", socket => {
 
   socket.on("tick", async (params: { gameId: string }) => {
     const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
-    const time = await redis.tick(params.gameId, isPlayer1);
-    console.log(time, isPlayer1);
+    const playerTime = await redis.tick(params.gameId, isPlayer1);
+    console.log(playerTime, isPlayer1);
     io.of("/game")
       .to(params.gameId)
-      .emit("timeUpdated", { time, isPlayer1 });
+      .emit("timeUpdated", { playerTime, isPlayer1 });
   });
 
   socket.on("move", (params: { gameId: string }) => {
