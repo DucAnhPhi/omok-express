@@ -84,6 +84,9 @@ io.of("/game").on("connection", socket => {
       // start game
       redis.startGame(params.gameId).then(() => {
         console.log("gameStarted");
+        io.of("game")
+          .in(params.gameId)
+          .emit("playing");
         if (isPlayer1) {
           socket.emit("move", "moved");
         } else {
