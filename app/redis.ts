@@ -33,15 +33,15 @@ export const createGame = async (
     player1: socketId,
     player1Name: user.username,
     player1Points: user.points,
-    player1Ready: false,
+    player1Ready: "false",
     player1Time: timeMode * 60,
     player2: "",
     player2Name: "",
     player2Points: "",
-    player2Ready: false,
+    player2Ready: "false",
     player2Time: timeMode * 60,
     timeMode,
-    playing: false,
+    playing: "false",
     turn: socketId,
     gameId
   };
@@ -87,13 +87,13 @@ export const leaveGame = async (socketId: string) => {
         player1Name: leavingGame.player2Name,
         player1Points: leavingGame.player2Points,
         player1Time: leavingGame.timeMode * 60,
-        player1Ready: false,
+        player1Ready: "false",
         player2: "",
         player2Name: "",
         player2Points: "",
-        player2Ready: false,
+        player2Ready: "false",
         player2Time: leavingGame.timeMode * 60,
-        playing: false,
+        playing: "false",
         turn: leavingGame.player2
       };
       hmsetAsync(leavingGameId, updatedGameProps).then(() => {
@@ -113,10 +113,10 @@ export const leaveGame = async (socketId: string) => {
       player2: "",
       player2Name: "",
       player2Points: "",
-      player2Ready: false,
+      player2Ready: "false",
       player1Time: leavingGame.timeMode * 60,
       player2Time: leavingGame.timeMode * 60,
-      playing: false,
+      playing: "false",
       turn: leavingGame.player1
     };
     hmsetAsync(leavingGameId, updatedGameProps).then(() => {
@@ -132,16 +132,16 @@ export const checkPlayersReady = async (gameId: string, isPlayer1: boolean) => {
   const player1Ready = await hgetAsync(gameId, "player1Ready");
   const player2Ready = await hgetAsync(gameId, "player2Ready");
   if (isPlayer1) {
-    if (player2Ready === "1") {
+    if (player2Ready === "true") {
       return true;
     } else {
-      hsetAsync(gameId, "player1Ready", "1");
+      hsetAsync(gameId, "player1Ready", "true");
     }
   } else {
-    if (player1Ready === "1") {
+    if (player1Ready === "true") {
       return true;
     } else {
-      hsetAsync(gameId, "player2Ready", "1");
+      hsetAsync(gameId, "player2Ready", "true");
     }
   }
   return false;

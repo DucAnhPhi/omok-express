@@ -79,6 +79,7 @@ io.of("/game").on("connection", socket => {
 
   socket.on("playerReady", async (params: { gameId: string }) => {
     const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
+    socket.in(params.gameId).emit("playerReady");
     const bothReady = await redis.checkPlayersReady(params.gameId, isPlayer1);
     if (bothReady) {
       // start game
@@ -86,7 +87,7 @@ io.of("/game").on("connection", socket => {
         console.log("gameStarted");
         io.of("game")
           .in(params.gameId)
-          .emit("playing");
+          .emit("gameStarted");
         if (isPlayer1) {
           socket.emit("move", "moved");
         } else {
