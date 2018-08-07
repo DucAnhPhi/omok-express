@@ -2,6 +2,7 @@ import express from "express";
 import http from "http";
 import * as redis from "./redis";
 import socketIo from "socket.io";
+import Game from "./game";
 
 const app = express();
 const server = new http.Server(app);
@@ -89,9 +90,9 @@ io.of("/game").on("connection", socket => {
           .in(params.gameId)
           .emit("gameStarted");
         if (isPlayer1) {
-          socket.emit("move", "moved");
+          socket.emit("turn");
         } else {
-          socket.in(params.gameId).emit("move", "moved");
+          socket.in(params.gameId).emit("turn");
         }
       });
     }
@@ -106,8 +107,64 @@ io.of("/game").on("connection", socket => {
       .emit("timeUpdated", { playerTime, isPlayer1 });
   });
 
-  socket.on("move", (params: { gameId: string }) => {
-    console.log(params.gameId);
-    socket.in(params.gameId).emit("move", "moved");
-  });
+  socket.on(
+    "move",
+    async (params: { gameId: string; position: { x: number; y: number } }) => {
+      try {
+        const game = await redis.getGameById(params.gameId);
+        const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
+        const moves = await redis.getMoves(params.gameId);
+        const currentMove = {
+          x: params.position.x,
+          y: params.position.y,
+          isPlayer1
+        };
+        console.log("currentMove", currentMove);
+        if (!game) {
+          // game does not exists
+          throw new Error("Invalid move: Game does not exist");
+        } else {
+          // game haven't started or aleady terminated
+          if (game.playing === "false") {
+            throw new Error(
+              "Invalid move: Game has not started or already terminated"
+            );
+          }
+          // not players turn
+          if (game.player1HasTurn !== `${isPlayer1}`) {
+            throw new Error("Invalid move: Not Player's turn");
+          }
+          // field already occupied
+          if (Game.checkFieldOccupied(moves, currentMove)) {
+            throw new Error("Invalid move: Field already occupied");
+          }
+        }
+        const boardPositions = Game.convertToPositions([
+          ...moves,
+          JSON.stringify(currentMove)
+        ]);
+        redis.makeMove(params.gameId, currentMove).then(() => {
+          // emit updated board positions to players
+          io.of("/game")
+            .in(params.gameId)
+            .emit("updateBoard", boardPositions);
+          // check for victory
+          if (Game.checkVictory(boardPositions)) {
+            redis.endGame(params.gameId).then(() => {
+              io.of("/game")
+                .in(params.gameId)
+                .emit("gameEnded", { victory: socket.id });
+            });
+          } else {
+            redis.changeTurn(params.gameId, `${!isPlayer1}`).then(() => {
+              // emit next turn to opponent
+              socket.in(params.gameId).emit("turn");
+            });
+          }
+        });
+      } catch (e) {
+        console.log("Error", e);
+      }
+    }
+  );
 });

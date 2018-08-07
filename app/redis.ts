@@ -18,6 +18,9 @@ const saddAsync = promisify(client.sadd).bind(client);
 const sremAsync = promisify(client.srem).bind(client);
 const smembersAsync = promisify(client.smembers).bind(client);
 const hincrbyAsync = promisify(client.hincrby).bind(client);
+const lrangeAsync = promisify(client.lrange).bind(client);
+const rpushAsync = promisify(client.rpush).bind(client);
+const rpopAsync = promisify(client.rpop).bind(client);
 
 client.on("connect", () => {
   console.log("connected to redis");
@@ -42,7 +45,7 @@ export const createGame = async (
     player2Time: timeMode * 60,
     timeMode,
     playing: "false",
-    turn: socketId,
+    player1HasTurn: "true",
     gameId
   };
   return Promise.all([
@@ -94,7 +97,7 @@ export const leaveGame = async (socketId: string) => {
         player2Ready: "false",
         player2Time: leavingGame.timeMode * 60,
         playing: "false",
-        turn: leavingGame.player2
+        player1HasTurn: "true"
       };
       hmsetAsync(leavingGameId, updatedGameProps).then(() => {
         saddAsync("openGames", leavingGameId).then(() => {
@@ -107,6 +110,7 @@ export const leaveGame = async (socketId: string) => {
         pub.publish("gameListChange", "game deleted");
       });
       delAsync(leavingGameId);
+      delAsync(`${leavingGameId}moves`);
     }
   } else {
     const updatedGameProps = {
@@ -117,7 +121,7 @@ export const leaveGame = async (socketId: string) => {
       player1Time: leavingGame.timeMode * 60,
       player2Time: leavingGame.timeMode * 60,
       playing: "false",
-      turn: leavingGame.player1
+      player1HasTurn: "true"
     };
     hmsetAsync(leavingGameId, updatedGameProps).then(() => {
       saddAsync("openGames", leavingGameId).then(() => {
@@ -198,4 +202,27 @@ export const tick = async (gameId: string, isPlayer1: boolean) => {
 
 export const getPlayer1 = (gameId: string) => {
   return hgetAsync(gameId, "player1");
+};
+
+export const getMoves = (gameId: string) => {
+  return lrangeAsync(`${gameId}moves`, 0, -1);
+};
+
+export const changeTurn = (gameId: string, player1HasTurn: string) => {
+  return hsetAsync(gameId, "player1HasTurn", player1HasTurn);
+};
+
+export const makeMove = (
+  gameId: string,
+  move: { x: number; y: number; isPlayer1: boolean }
+) => {
+  return rpushAsync(`${gameId}moves`, JSON.stringify(move));
+};
+
+export const undoRecentMove = (gameId: string) => {
+  return rpopAsync(`${gameId}moves`);
+};
+
+export const endGame = (gameId: string) => {
+  return hsetAsync(gameId, "playing", "false");
 };
