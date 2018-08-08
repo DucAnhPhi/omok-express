@@ -109,6 +109,50 @@ io.of("/game").on("connection", socket => {
       .emit("timeUpdated", { playerTime, isPlayer1 });
   });
 
+  socket.on("offer", (params: { gameId: string; type: "redo" | "draw" }) => {
+    socket.in(params.gameId).emit("offer", params.type);
+  });
+
+  socket.on(
+    "offerAccepted",
+    async (params: { gameId: string; type: "redo" | "draw" }) => {
+      if (params.type === "redo") {
+        try {
+          const hasTurn = await redis.checkHasTurn(socket.id, params.gameId);
+          if (!hasTurn) {
+            throw new Error("Invalid redo. Offering Player still has turn.");
+          }
+          const moves = await redis.getMoves(params.gameId);
+          if (moves.length === 0) {
+            throw new Error("Invalid redo. No moves made yet.");
+          }
+          Promise.all([
+            redis.undoRecentMove(params.gameId),
+            redis.changeTurn(params.gameId)
+          ]).then(async () => {
+            const moves = await redis.getMoves(params.gameId);
+            const boardPositions = Game.convertToPositions(moves);
+            // emit updated board positions to players
+            io.of("/game")
+              .in(params.gameId)
+              .emit("updateBoard", boardPositions);
+            // emit next turn to opponent
+            socket.in(params.gameId).emit("turn");
+          });
+        } catch (e) {
+          console.log(e);
+        }
+      }
+      if (params.type === "draw") {
+        redis.endGame(params.gameId).then(() => {
+          io.of("/game")
+            .in(params.gameId)
+            .emit("gameEnded", { draw: true });
+        });
+      }
+    }
+  );
+
   socket.on(
     "move",
     async (params: { gameId: string; position: { x: number; y: number } }) => {
@@ -158,7 +202,7 @@ io.of("/game").on("connection", socket => {
                 .emit("gameEnded", { victory: socket.id });
             });
           } else {
-            redis.changeTurn(params.gameId, `${!isPlayer1}`).then(() => {
+            redis.changeTurn(params.gameId).then(() => {
               // emit next turn to opponent
               socket.in(params.gameId).emit("turn");
             });

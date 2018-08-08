@@ -265,7 +265,9 @@ export const getMoves = (gameId: string) => {
   return lrangeAsync(`${gameId}moves`, 0, -1);
 };
 
-export const changeTurn = (gameId: string, player1HasTurn: string) => {
+export const changeTurn = async (gameId: string) => {
+  let player1HasTurn = await hgetAsync(gameId, "player1HasTurn");
+  player1HasTurn = player1HasTurn === "true" ? "false" : "true";
   return hsetAsync(gameId, "player1HasTurn", player1HasTurn);
 };
 
@@ -282,4 +284,16 @@ export const undoRecentMove = (gameId: string) => {
 
 export const deleteMoves = (gameId: string) => {
   return delAsync(`${gameId}moves`);
+};
+
+export const checkHasTurn = async (socketId: string, gameId: string) => {
+  const isPlayer1: boolean = await checkIsPlayer1(socketId, gameId);
+  const player1HasTurnStr: "true" | "false" = await hgetAsync(
+    gameId,
+    "player1HasTurn"
+  );
+  console.log("isPlayer1", isPlayer1);
+  console.log("player1HasTurn", player1HasTurnStr);
+  const player1HasTurn = player1HasTurnStr === "true";
+  return isPlayer1 === player1HasTurn;
 };
