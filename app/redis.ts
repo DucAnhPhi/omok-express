@@ -2,6 +2,23 @@ import redis from "redis";
 import uuidv4 from "uuid/v4";
 import { promisify } from "util";
 
+export interface IGame {
+  player1: string;
+  player1Name: string;
+  player1Points: string;
+  player1Ready: "false" | "true";
+  player1Time: string;
+  player2: string;
+  player2Name: string;
+  player2Points: string;
+  player2Ready: "false" | "true";
+  player2Time: string;
+  timeMode: string;
+  playing: "false" | "true";
+  player1HasTurn: "false" | "true";
+  gameId: string;
+}
+
 export const client = redis.createClient();
 export const pub = client.duplicate();
 export const sub = client.duplicate();
@@ -32,18 +49,18 @@ export const createGame = async (
   timeMode: number
 ) => {
   const gameId = uuidv4();
-  const initialGame = {
+  const initialGame: IGame = {
     player1: socketId,
     player1Name: user.username,
-    player1Points: user.points,
+    player1Points: `${user.points}`,
     player1Ready: "false",
-    player1Time: timeMode * 60,
+    player1Time: `${timeMode * 60}`,
     player2: "",
     player2Name: "",
     player2Points: "",
     player2Ready: "false",
-    player2Time: timeMode * 60,
-    timeMode,
+    player2Time: `${timeMode * 60}`,
+    timeMode: `${timeMode}`,
     playing: "false",
     player1HasTurn: "true",
     gameId
@@ -151,8 +168,18 @@ export const checkPlayersReady = async (gameId: string, isPlayer1: boolean) => {
   return false;
 };
 
-export const getOpenGames = () => {
+const getOpenGameIds = () => {
   return smembersAsync("openGames");
+};
+
+export const getOpenGames = async () => {
+  const gameIds: string[] = await getOpenGameIds();
+  const games: IGame[] = await Promise.all(
+    gameIds.map((gameId: string) =>
+      getGameById(gameId).then((game: IGame) => game)
+    )
+  );
+  return games;
 };
 
 export const printKeys = () => {

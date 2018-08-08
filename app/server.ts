@@ -11,16 +11,15 @@ const io = socketIo(server);
 server.listen(3000);
 
 io.of("/gameList").on("connection", socket => {
+  // initially send back open games
+  redis
+    .getOpenGames()
+    .then((games: redis.IGame[]) => socket.emit("openGames", games));
   const subscription = redis.subscribeGameList();
   subscription.on("message", async (channel, message) => {
     console.log(message);
     try {
-      const gameIds = await redis.getOpenGames();
-      const games = await Promise.all(
-        gameIds.map((gameId: string) =>
-          redis.getGameById(gameId).then((game: any) => ({ ...game, gameId }))
-        )
-      );
+      const games = await redis.getOpenGames();
       console.log("here are the games");
       console.log(games);
       socket.emit("openGames", games);
