@@ -226,6 +226,21 @@ export const startGame = (gameId: string) => {
   return hsetAsync(gameId, "playing", true);
 };
 
+export const endGame = async (gameId: string) => {
+  const tempGame = await getGameById(gameId);
+  const updatedGame = getDefaultGame({
+    gameId,
+    timeMode: tempGame.timeMode,
+    player1: tempGame.player1,
+    player1Name: tempGame.player1Name,
+    player1Points: tempGame.player1Points,
+    player2: tempGame.player2,
+    player2Name: tempGame.player2Name,
+    player2Points: tempGame.player2Points
+  });
+  return Promise.all([updateGame(gameId, updatedGame), deleteMoves(gameId)]);
+};
+
 export const checkIsPlayer1 = async (socketId: string, gameId: string) => {
   const player1 = await hgetAsync(gameId, "player1");
   if (socketId === player1) {

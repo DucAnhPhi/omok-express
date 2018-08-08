@@ -152,9 +152,11 @@ io.of("/game").on("connection", socket => {
             .emit("updateBoard", boardPositions);
           // check for victory
           if (Game.checkVictory(boardPositions)) {
-            io.of("/game")
-              .in(params.gameId)
-              .emit("gameEnded", { victory: socket.id });
+            redis.endGame(params.gameId).then(() => {
+              io.of("/game")
+                .in(params.gameId)
+                .emit("gameEnded", { victory: socket.id });
+            });
           } else {
             redis.changeTurn(params.gameId, `${!isPlayer1}`).then(() => {
               // emit next turn to opponent
