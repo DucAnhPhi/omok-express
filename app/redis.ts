@@ -1,23 +1,13 @@
 import redis from "redis";
 import uuidv4 from "uuid/v4";
 import { promisify } from "util";
+import { Dictionary, IGame } from "./models";
 
-export interface IGame {
-  player1: string;
-  player1Name: string;
-  player1Points: string;
-  player1Ready: "false" | "true";
-  player1Time: string;
-  player2: string;
-  player2Name: string;
-  player2Points: string;
-  player2Ready: "false" | "true";
-  player2Time: string;
-  timeMode: string;
-  playing: "false" | "true";
-  player1HasTurn: "false" | "true";
-  gameId: string;
-}
+const timeDict: Dictionary = {
+  "5": "300",
+  "10": "600",
+  "15": "900"
+};
 
 export const client = redis.createClient();
 export const pub = client.duplicate();
@@ -49,104 +39,133 @@ export const createGame = async (
   timeMode: number
 ) => {
   const gameId = uuidv4();
-  const initialGame: IGame = {
+  const initialGame: IGame = getDefaultGame({
+    gameId,
+    timeMode: String(timeMode),
     player1: socketId,
     player1Name: user.username,
-    player1Points: `${user.points}`,
-    player1Ready: "false",
-    player1Time: `${timeMode * 60}`,
-    player2: "",
-    player2Name: "",
-    player2Points: "",
-    player2Ready: "false",
-    player2Time: `${timeMode * 60}`,
-    timeMode: `${timeMode}`,
-    playing: "false",
-    player1HasTurn: "true",
-    gameId
-  };
+    player1Points: String(user.points)
+  });
   return Promise.all([
-    hmsetAsync(gameId, initialGame),
-    setAsync(socketId, gameId),
-    saddAsync("openGames", gameId)
+    updateGame(gameId, initialGame),
+    addSocketRef(socketId, gameId),
+    addToOpenGames(gameId)
   ]).then(() => {
-    pub.publish("gameListChange", "game created");
+    publishGameListChange("game created");
     return initialGame;
   });
 };
+
+const getDefaultGame = (options: {
+  gameId: string;
+  timeMode: string;
+  player1?: string;
+  player1Name?: string;
+  player1Points?: string;
+  player2?: string;
+  player2Name?: string;
+  player2Points?: string;
+}): IGame => ({
+  player1: options.player1 ? options.player1 : "",
+  player1Name: options.player1Name ? options.player1Name : "",
+  player1Points: options.player1Points ? options.player1Points : "",
+  player1Ready: "false",
+  player1Time: timeDict[options.timeMode],
+  player2: options.player2 ? options.player2 : "",
+  player2Name: options.player2Name ? options.player2Name : "",
+  player2Points: options.player2Points ? options.player2Points : "",
+  player2Ready: "false",
+  player2Time: timeDict[options.timeMode],
+  timeMode: options.timeMode,
+  playing: "false",
+  player1HasTurn: "true",
+  gameId: options.gameId
+});
 
 export const joinGame = async (
   socketId: string,
   user: { username: string; points: number },
   gameId: string
-) => {
-  const game = await getGameById(gameId);
+): Promise<IGame> => {
+  const game: IGame = await getGameById(gameId);
   game.player2 = socketId;
   game.player2Name = user.username;
-  game.player2Points = user.points;
+  game.player2Points = `${user.points}`;
   console.log(game);
   return Promise.all([
-    hmsetAsync(gameId, game),
-    setAsync(socketId, gameId),
-    sremAsync("openGames", gameId)
+    updateGame(gameId, game),
+    addSocketRef(socketId, gameId),
+    removeFromOpenGames(gameId)
   ]).then(() => {
-    pub.publish("gameListChange", "game matched");
+    publishGameListChange("game matched");
     return game;
   });
 };
 
 export const leaveGame = async (socketId: string) => {
-  const leavingGameId = await getGameIdBySocketId(socketId);
-  const isPlayer1 = await checkIsPlayer1(socketId, leavingGameId);
-  const leavingGame = await getGameById(leavingGameId);
-  if (isPlayer1) {
-    if (leavingGame.player2) {
-      // if there is player2, make player2 to player1
-      const updatedGameProps = {
-        player1: leavingGame.player2,
-        player1Name: leavingGame.player2Name,
-        player1Points: leavingGame.player2Points,
-        player1Time: leavingGame.timeMode * 60,
-        player1Ready: "false",
-        player2: "",
-        player2Name: "",
-        player2Points: "",
-        player2Ready: "false",
-        player2Time: leavingGame.timeMode * 60,
-        playing: "false",
-        player1HasTurn: "true"
-      };
-      hmsetAsync(leavingGameId, updatedGameProps).then(() => {
-        saddAsync("openGames", leavingGameId).then(() => {
-          pub.publish("gameListChange", "player2 is now player1");
-        });
-      });
-    } else {
-      // if there is no other player delete game
-      sremAsync("openGames", leavingGameId).then(() => {
-        pub.publish("gameListChange", "game deleted");
-      });
-      delAsync(leavingGameId);
-      delAsync(`${leavingGameId}moves`);
-    }
+  const leavingGameId: string = await getGameIdBySocketId(socketId);
+  const isPlayer1: boolean = await checkIsPlayer1(socketId, leavingGameId);
+  const leavingGame: IGame = await getGameById(leavingGameId);
+  if (isPlayer1 && leavingGame.player2 === "") {
+    // if last player leaves, delete game
+    removeFromOpenGames(leavingGameId).then(async () => {
+      publishGameListChange("game deleted");
+    });
+    deleteGame(leavingGameId);
+    deleteMoves(leavingGameId);
   } else {
+    // set whoever is left as player1 and clear player2
     const updatedGameProps = {
+      player1: isPlayer1 ? leavingGame.player2 : leavingGame.player1,
+      player1Name: isPlayer1
+        ? leavingGame.player2Name
+        : leavingGame.player1Name,
+      player1Points: isPlayer1
+        ? leavingGame.player2Points
+        : leavingGame.player1Points,
       player2: "",
       player2Name: "",
-      player2Points: "",
-      player2Ready: "false",
-      player1Time: leavingGame.timeMode * 60,
-      player2Time: leavingGame.timeMode * 60,
-      playing: "false",
-      player1HasTurn: "true"
+      player2Points: ""
     };
-    hmsetAsync(leavingGameId, updatedGameProps).then(() => {
-      saddAsync("openGames", leavingGameId).then(() => {
-        pub.publish("gameListChange", "player2 left");
+    const updatedGame = getDefaultGame({
+      gameId: leavingGameId,
+      timeMode: leavingGame.timeMode,
+      ...updatedGameProps
+    });
+    Promise.all([
+      updateGame(leavingGameId, updatedGame),
+      deleteMoves(leavingGameId)
+    ]).then(() => {
+      addToOpenGames(leavingGameId).then(() => {
+        publishGameListChange("player2 left");
       });
     });
   }
-  delAsync(socketId);
+  deleteSocketRef(socketId);
+};
+
+const removeFromOpenGames = (gameId: string) => {
+  return sremAsync("openGames", gameId);
+};
+
+const addToOpenGames = (gameId: string) => {
+  return saddAsync("openGames", gameId);
+};
+
+const updateGame = (gameId: string, game: IGame) => {
+  return hmsetAsync(gameId, game);
+};
+
+const deleteGame = (gameId: string) => {
+  return delAsync(gameId);
+};
+
+const addSocketRef = (socketId: string, gameId: string) => {
+  return setAsync(socketId, gameId);
+};
+
+const deleteSocketRef = (socketId: string) => {
+  return delAsync(socketId);
 };
 
 export const checkPlayersReady = async (gameId: string, isPlayer1: boolean) => {
@@ -182,14 +201,6 @@ export const getOpenGames = async () => {
   return games;
 };
 
-export const printKeys = () => {
-  client.keys("*", (err, keys) => console.log(keys));
-};
-
-export const clearAll = () => {
-  client.flushall();
-};
-
 export const subscribeGameList = () => {
   sub.subscribe("gameListChange");
   return sub;
@@ -197,6 +208,10 @@ export const subscribeGameList = () => {
 
 export const unsubscribeGameList = () => {
   sub.unsubscribe("gameListChange");
+};
+
+const publishGameListChange = (message: string) => {
+  pub.publish("gameListChange", message);
 };
 
 export const getGameById = (gameId: string) => {
@@ -250,6 +265,6 @@ export const undoRecentMove = (gameId: string) => {
   return rpopAsync(`${gameId}moves`);
 };
 
-export const endGame = (gameId: string) => {
-  return hsetAsync(gameId, "playing", "false");
+export const deleteMoves = (gameId: string) => {
+  return delAsync(`${gameId}moves`);
 };

@@ -3,6 +3,7 @@ import http from "http";
 import * as redis from "./redis";
 import socketIo from "socket.io";
 import Game from "./game";
+import { IGame } from "./models";
 
 const app = express();
 const server = new http.Server(app);
@@ -14,7 +15,7 @@ io.of("/gameList").on("connection", socket => {
   // initially send back open games
   redis
     .getOpenGames()
-    .then((games: redis.IGame[]) => socket.emit("openGames", games));
+    .then((games: IGame[]) => socket.emit("openGames", games));
   const subscription = redis.subscribeGameList();
   subscription.on("message", async (channel, message) => {
     console.log(message);
@@ -53,7 +54,7 @@ io.of("/game").on("connection", socket => {
     }) => {
       redis
         .createGame(socket.id, params.user, params.timeMode)
-        .then(initialGame => {
+        .then((initialGame: IGame) => {
           console.log(initialGame.gameId);
           socket.join(initialGame.gameId);
           socket.emit("gameCreated", initialGame);
@@ -67,13 +68,15 @@ io.of("/game").on("connection", socket => {
       user: { username: string; points: number };
       gameId: string;
     }) => {
-      redis.joinGame(socket.id, params.user, params.gameId).then(game => {
-        console.log(params.gameId);
-        socket.join(params.gameId);
-        io.of("/game")
-          .to(params.gameId)
-          .emit("gameJoined", game);
-      });
+      redis
+        .joinGame(socket.id, params.user, params.gameId)
+        .then((game: IGame) => {
+          console.log(params.gameId);
+          socket.join(params.gameId);
+          io.of("/game")
+            .to(params.gameId)
+            .emit("gameJoined", game);
+        });
     }
   );
 
@@ -149,11 +152,9 @@ io.of("/game").on("connection", socket => {
             .emit("updateBoard", boardPositions);
           // check for victory
           if (Game.checkVictory(boardPositions)) {
-            redis.endGame(params.gameId).then(() => {
-              io.of("/game")
-                .in(params.gameId)
-                .emit("gameEnded", { victory: socket.id });
-            });
+            io.of("/game")
+              .in(params.gameId)
+              .emit("gameEnded", { victory: socket.id });
           } else {
             redis.changeTurn(params.gameId, `${!isPlayer1}`).then(() => {
               // emit next turn to opponent
