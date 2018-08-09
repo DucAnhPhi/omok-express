@@ -107,6 +107,13 @@ io.of("/game").on("connection", socket => {
     io.of("/game")
       .to(params.gameId)
       .emit("timeUpdated", { playerTime, isPlayer1 });
+    if (playerTime === 0) {
+      redis.endGame(params.gameId).then(() => {
+        io.of("/game")
+          .in(params.gameId)
+          .emit("gameEnded", { victory: { isPlayer1: !isPlayer1 } });
+      });
+    }
   });
 
   socket.on("offer", (params: { gameId: string; type: "redo" | "draw" }) => {
@@ -199,7 +206,7 @@ io.of("/game").on("connection", socket => {
             redis.endGame(params.gameId).then(() => {
               io.of("/game")
                 .in(params.gameId)
-                .emit("gameEnded", { victory: socket.id });
+                .emit("gameEnded", { victory: { isPlayer1 } });
             });
           } else {
             redis.changeTurn(params.gameId).then(() => {
