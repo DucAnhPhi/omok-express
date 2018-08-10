@@ -4,6 +4,7 @@ import * as redis from "./redis";
 import socketIo from "socket.io";
 import Game from "./game";
 import { IGame } from "./models";
+import GameListNamespace from "./namespaces/gameList";
 
 const app = express();
 const server = new http.Server(app);
@@ -11,29 +12,7 @@ const io = socketIo(server);
 
 server.listen(3000);
 
-io.of("/gameList").on("connection", socket => {
-  // initially send back open games
-  redis
-    .getOpenGames()
-    .then((games: IGame[]) => socket.emit("openGames", games));
-  const subscription = redis.subscribeGameList();
-  subscription.on("message", async (channel, message) => {
-    console.log(message);
-    try {
-      const games = await redis.getOpenGames();
-      console.log("here are the games");
-      console.log(games);
-      socket.emit("openGames", games);
-    } catch (e) {
-      console.log(e);
-    }
-  });
-  console.log("connected to gameList");
-  socket.on("disconnect", () => {
-    redis.unsubscribeGameList();
-    console.log("disconnect gameList");
-  });
-});
+const gameListNamespace = new GameListNamespace(io);
 
 io.of("/game").on("connection", socket => {
   console.log("connected to game");
