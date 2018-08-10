@@ -7,16 +7,6 @@ export default class GameListNamespace {
     io.of("gameList").on("connection", this.handleConnection.bind(this));
   }
 
-  async emitOpenGames(socket: socketIo.Socket) {
-    try {
-      const openGames: IGame[] = await redis.getOpenGames();
-      console.log("open games:", openGames);
-      socket.emit("openGames", openGames);
-    } catch (e) {
-      console.log("Error: could get open games:", e);
-    }
-  }
-
   handleConnection(socket: socketIo.Socket) {
     console.log("connected to gameList");
     // initially send back open games
@@ -40,5 +30,15 @@ export default class GameListNamespace {
   handleDisconnect() {
     console.log("disconnected from gameList");
     redis.unsubscribeGameList();
+  }
+
+  async emitOpenGames(socket: socketIo.Socket) {
+    try {
+      const openGames: IGame[] = await redis.getOpenGames();
+      console.log("open games:", openGames);
+      socket.emit("openGames", openGames);
+    } catch (e) {
+      console.log("Error: could get open games:", e);
+    }
   }
 }
