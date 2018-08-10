@@ -15,6 +15,11 @@ export interface IGame {
   gameId: string;
 }
 
+export interface Profile {
+  username: string;
+  points: number;
+}
+
 export interface Dictionary {
   [key: string]: string;
 }

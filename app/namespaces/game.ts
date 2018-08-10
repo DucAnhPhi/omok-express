@@ -1,0 +1,237 @@
+import socketIo from "socket.io";
+import * as redis from "../redis";
+import { Profile, IGame } from "../models";
+import Game from "../lib/game";
+
+export default class GameNamespace {
+  io: socketIo.Server;
+
+  constructor(io: socketIo.Server) {
+    this.io = io;
+    io.of("game").on("connection", this.handleConnection.bind(this));
+  }
+
+  handleConnection(socket: socketIo.Socket) {
+    console.log("connected to game");
+    socket.on("disconnect", () => this.disconnect(socket));
+
+    socket.on("createGame", (params: { user: Profile; timeMode: number }) =>
+      this.createGame(params, socket)
+    );
+
+    socket.on("joinGame", (params: { user: Profile; gameId: string }) =>
+      this.joinGame(params, socket)
+    );
+
+    socket.on("playerReady", (params: { gameId: string }) =>
+      this.handlePlayerReady(params, socket)
+    );
+
+    socket.on("tick", (params: { gameId: string }) => {
+      this.tick(params, socket);
+    });
+
+    socket.on("offer", (params: { gameId: string; type: "redo" | "draw" }) => {
+      this.offer(params, socket);
+    });
+
+    socket.on(
+      "offerAccepted",
+      (params: { gameId: string; type: "redo" | "draw" }) => {
+        this.handleOfferAccepted(params, socket);
+      }
+    );
+
+    socket.on(
+      "move",
+      (params: { gameId: string; position: { x: number; y: number } }) => {
+        this.move(params, socket);
+      }
+    );
+  }
+
+  disconnect(socket: socketIo.Socket) {
+    console.log("disconnected from game");
+    redis.leaveGame(socket.id);
+    // emit to opponent that player left
+    redis.getGameIdBySocketId(socket.id).then((gameId: string) => {
+      socket.to(gameId).emit("playerLeft");
+    });
+  }
+
+  createGame(
+    params: { user: Profile; timeMode: number },
+    socket: socketIo.Socket
+  ) {
+    redis
+      .createGame(socket.id, params.user, params.timeMode)
+      .then((initialGame: IGame) => {
+        socket.join(initialGame.gameId);
+        socket.emit("gameCreated", initialGame);
+      });
+  }
+
+  joinGame(params: { user: Profile; gameId: string }, socket: socketIo.Socket) {
+    redis
+      .joinGame(socket.id, params.user, params.gameId)
+      .then((game: IGame) => {
+        console.log(params.gameId);
+        socket.join(params.gameId);
+        this.io
+          .of("/game")
+          .to(params.gameId)
+          .emit("gameJoined", game);
+      });
+  }
+
+  async handlePlayerReady(params: { gameId: string }, socket: socketIo.Socket) {
+    socket.in(params.gameId).emit("playerReady");
+    const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
+    const bothReady = await redis.checkPlayersReady(params.gameId, isPlayer1);
+    if (bothReady) {
+      // start game
+      redis.startGame(params.gameId).then(() => {
+        console.log("gameStarted");
+        this.io
+          .of("game")
+          .in(params.gameId)
+          .emit("gameStarted");
+        if (isPlayer1) {
+          socket.emit("turn");
+        } else {
+          socket.in(params.gameId).emit("turn");
+        }
+      });
+    }
+  }
+
+  async tick(params: { gameId: string }, socket: socketIo.Socket) {
+    const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
+    const playerTime = await redis.tick(params.gameId, isPlayer1);
+    console.log(playerTime, isPlayer1);
+    this.io
+      .of("/game")
+      .to(params.gameId)
+      .emit("timeUpdated", { playerTime, isPlayer1 });
+    if (playerTime === 0) {
+      redis.endGame(params.gameId).then(() => {
+        this.io
+          .of("/game")
+          .in(params.gameId)
+          .emit("gameEnded", { victory: { isPlayer1: !isPlayer1 } });
+      });
+    }
+  }
+
+  offer(
+    params: { gameId: string; type: "redo" | "draw" },
+    socket: socketIo.Socket
+  ) {
+    socket.in(params.gameId).emit("offer", params.type);
+  }
+
+  async handleOfferAccepted(
+    params: { gameId: string; type: "redo" | "draw" },
+    socket: socketIo.Socket
+  ) {
+    if (params.type === "redo") {
+      try {
+        const hasTurn = await redis.checkHasTurn(socket.id, params.gameId);
+        if (!hasTurn) {
+          throw new Error("Invalid redo. Offering Player still has turn.");
+        }
+        const moves = await redis.getMoves(params.gameId);
+        if (moves.length === 0) {
+          throw new Error("Invalid redo. No moves made yet.");
+        }
+        Promise.all([
+          redis.undoRecentMove(params.gameId),
+          redis.changeTurn(params.gameId)
+        ]).then(async () => {
+          const moves = await redis.getMoves(params.gameId);
+          const boardPositions = Game.convertToPositions(moves);
+          // emit updated board positions to players
+          this.io
+            .of("/game")
+            .in(params.gameId)
+            .emit("updateBoard", boardPositions);
+          // emit next turn to opponent
+          socket.in(params.gameId).emit("turn");
+        });
+      } catch (e) {
+        console.log(e);
+      }
+    }
+    if (params.type === "draw") {
+      redis.endGame(params.gameId).then(() => {
+        this.io
+          .of("/game")
+          .in(params.gameId)
+          .emit("gameEnded", { draw: true });
+      });
+    }
+  }
+
+  async move(
+    params: { gameId: string; position: { x: number; y: number } },
+    socket: socketIo.Socket
+  ) {
+    try {
+      const game = await redis.getGameById(params.gameId);
+      const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
+      const moves = await redis.getMoves(params.gameId);
+      const currentMove = {
+        x: params.position.x,
+        y: params.position.y,
+        isPlayer1
+      };
+      console.log("currentMove", currentMove);
+      if (!game) {
+        // game does not exists
+        throw new Error("Invalid move: Game does not exist");
+      } else {
+        // game haven't started or aleady terminated
+        if (game.playing === "false") {
+          throw new Error(
+            "Invalid move: Game has not started or already terminated"
+          );
+        }
+        // not players turn
+        if (game.player1HasTurn !== `${isPlayer1}`) {
+          throw new Error("Invalid move: Not Player's turn");
+        }
+        // field already occupied
+        if (Game.checkFieldOccupied(moves, currentMove)) {
+          throw new Error("Invalid move: Field already occupied");
+        }
+      }
+      const boardPositions = Game.convertToPositions([
+        ...moves,
+        JSON.stringify(currentMove)
+      ]);
+      redis.makeMove(params.gameId, currentMove).then(() => {
+        // emit updated board positions to players
+        this.io
+          .of("/game")
+          .in(params.gameId)
+          .emit("updateBoard", boardPositions);
+        // check for victory
+        if (Game.checkVictory(boardPositions)) {
+          redis.endGame(params.gameId).then(() => {
+            this.io
+              .of("/game")
+              .in(params.gameId)
+              .emit("gameEnded", { victory: { isPlayer1 } });
+          });
+        } else {
+          redis.changeTurn(params.gameId).then(() => {
+            // emit next turn to opponent
+            socket.in(params.gameId).emit("turn");
+          });
+        }
+      });
+    } catch (e) {
+      console.log("Error", e);
+    }
+  }
+}

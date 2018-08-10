@@ -19,7 +19,7 @@ export default class GameListNamespace {
     });
 
     // handle disconnect from namespace
-    socket.on("disconnect", this.handleDisconnect);
+    socket.on("disconnect", this.disconnect);
   }
 
   handleSubscription(channel: string, message: any, socket: socketIo.Socket) {
@@ -27,7 +27,7 @@ export default class GameListNamespace {
     this.emitOpenGames(socket);
   }
 
-  handleDisconnect() {
+  disconnect() {
     console.log("disconnected from gameList");
     redis.unsubscribeGameList();
   }
