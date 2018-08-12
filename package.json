@@ -8,6 +8,7 @@
   "author": "Duc Anh Phi",
   "license": "ISC",
   "dependencies": {
+    "bluebird": "^3.5.1",
     "express": "^4.16.3",
     "firebase-admin": "^6.0.0",
     "http": "0.0.0",
@@ -17,6 +18,7 @@
     "uuid": "^3.3.2"
   },
   "devDependencies": {
+    "@types/bluebird": "^3.5.23",
     "@types/es6-shim": "^0.31.37",
     "@types/express": "^4.16.0",
     "@types/redis": "^2.8.6",
