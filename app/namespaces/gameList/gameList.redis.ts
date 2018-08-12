@@ -1,4 +1,4 @@
-import { IGame } from "../models";
+import { IGame } from "../../models";
 import redis from "redis";
 import Bluebird from "bluebird";
 Bluebird.promisifyAll(redis);
@@ -25,7 +25,7 @@ export default class RedisGameList {
     const gameIds: string[] = await this.client.smembersAsync("openGames");
     const games: IGame[] = await Promise.all(
       gameIds.map((gameId: string) =>
-        this.client.hgetAllAsync(gameId).then((game: IGame) => game)
+        this.client.hgetallAsync(gameId).then((game: IGame) => game)
       )
     );
     return games;

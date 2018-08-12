@@ -1,12 +1,14 @@
 import socketIo from "socket.io";
-import * as redis from "../redis";
-import { Profile, IGame } from "../models";
-import Game from "../lib/game";
+import { Profile, IGame } from "../../models";
+import Game from "../../lib/game";
+import RedisGame from "./game.redis";
 
 export default class GameNamespace {
   io: socketIo.Server;
+  redis: RedisGame;
 
   constructor(io: socketIo.Server) {
+    this.redis = new RedisGame();
     this.io = io;
     io.of("game").on("connection", this.handleConnection.bind(this));
   }
@@ -52,9 +54,9 @@ export default class GameNamespace {
 
   disconnect(socket: socketIo.Socket) {
     console.log("disconnected from game");
-    redis.leaveGame(socket.id);
+    this.redis.leaveGame(socket.id);
     // emit to opponent that player left
-    redis.getGameIdBySocketId(socket.id).then((gameId: string) => {
+    this.redis.getGameIdBySocketId(socket.id).then((gameId: string) => {
       socket.to(gameId).emit("playerLeft");
     });
   }
@@ -63,7 +65,7 @@ export default class GameNamespace {
     params: { user: Profile; timeMode: number },
     socket: socketIo.Socket
   ) {
-    redis
+    this.redis
       .createGame(socket.id, params.user, params.timeMode)
       .then((initialGame: IGame) => {
         socket.join(initialGame.gameId);
@@ -72,7 +74,7 @@ export default class GameNamespace {
   }
 
   joinGame(params: { user: Profile; gameId: string }, socket: socketIo.Socket) {
-    redis
+    this.redis
       .joinGame(socket.id, params.user, params.gameId)
       .then((game: IGame) => {
         console.log(params.gameId);
@@ -86,11 +88,14 @@ export default class GameNamespace {
 
   async handlePlayerReady(params: { gameId: string }, socket: socketIo.Socket) {
     socket.in(params.gameId).emit("playerReady");
-    const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
-    const bothReady = await redis.checkPlayersReady(params.gameId, isPlayer1);
+    const isPlayer1 = await this.redis.checkIsPlayer1(socket.id, params.gameId);
+    const bothReady = await this.redis.checkPlayersReady(
+      params.gameId,
+      isPlayer1
+    );
     if (bothReady) {
       // start game
-      redis.startGame(params.gameId).then(() => {
+      this.redis.startGame(params.gameId).then(() => {
         console.log("gameStarted");
         this.io
           .of("game")
@@ -106,15 +111,15 @@ export default class GameNamespace {
   }
 
   async tick(params: { gameId: string }, socket: socketIo.Socket) {
-    const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
-    const playerTime = await redis.tick(params.gameId, isPlayer1);
+    const isPlayer1 = await this.redis.checkIsPlayer1(socket.id, params.gameId);
+    const playerTime = await this.redis.tick(params.gameId, isPlayer1);
     console.log(playerTime, isPlayer1);
     this.io
       .of("/game")
       .to(params.gameId)
       .emit("timeUpdated", { playerTime, isPlayer1 });
     if (playerTime === 0) {
-      redis.endGame(params.gameId).then(() => {
+      this.redis.endGame(params.gameId).then(() => {
         this.io
           .of("/game")
           .in(params.gameId)
@@ -136,19 +141,19 @@ export default class GameNamespace {
   ) {
     if (params.type === "redo") {
       try {
-        const hasTurn = await redis.checkHasTurn(socket.id, params.gameId);
+        const hasTurn = await this.redis.checkHasTurn(socket.id, params.gameId);
         if (!hasTurn) {
           throw new Error("Invalid redo. Offering Player still has turn.");
         }
-        const moves = await redis.getMoves(params.gameId);
+        const moves = await this.redis.getMoves(params.gameId);
         if (moves.length === 0) {
           throw new Error("Invalid redo. No moves made yet.");
         }
         Promise.all([
-          redis.undoRecentMove(params.gameId),
-          redis.changeTurn(params.gameId)
+          this.redis.undoRecentMove(params.gameId),
+          this.redis.changeTurn(params.gameId)
         ]).then(async () => {
-          const moves = await redis.getMoves(params.gameId);
+          const moves = await this.redis.getMoves(params.gameId);
           const boardPositions = Game.convertToPositions(moves);
           // emit updated board positions to players
           this.io
@@ -163,7 +168,7 @@ export default class GameNamespace {
       }
     }
     if (params.type === "draw") {
-      redis.endGame(params.gameId).then(() => {
+      this.redis.endGame(params.gameId).then(() => {
         this.io
           .of("/game")
           .in(params.gameId)
@@ -177,9 +182,12 @@ export default class GameNamespace {
     socket: socketIo.Socket
   ) {
     try {
-      const game = await redis.getGameById(params.gameId);
-      const isPlayer1 = await redis.checkIsPlayer1(socket.id, params.gameId);
-      const moves = await redis.getMoves(params.gameId);
+      const game = await this.redis.getGameById(params.gameId);
+      const isPlayer1 = await this.redis.checkIsPlayer1(
+        socket.id,
+        params.gameId
+      );
+      const moves = await this.redis.getMoves(params.gameId);
       const currentMove = {
         x: params.position.x,
         y: params.position.y,
@@ -209,7 +217,7 @@ export default class GameNamespace {
         ...moves,
         JSON.stringify(currentMove)
       ]);
-      redis.makeMove(params.gameId, currentMove).then(() => {
+      this.redis.makeMove(params.gameId, currentMove).then(() => {
         // emit updated board positions to players
         this.io
           .of("/game")
@@ -217,14 +225,14 @@ export default class GameNamespace {
           .emit("updateBoard", boardPositions);
         // check for victory
         if (Game.checkVictory(boardPositions)) {
-          redis.endGame(params.gameId).then(() => {
+          this.redis.endGame(params.gameId).then(() => {
             this.io
               .of("/game")
               .in(params.gameId)
               .emit("gameEnded", { victory: { isPlayer1 } });
           });
         } else {
-          redis.changeTurn(params.gameId).then(() => {
+          this.redis.changeTurn(params.gameId).then(() => {
             // emit next turn to opponent
             socket.in(params.gameId).emit("turn");
           });

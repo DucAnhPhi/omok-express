@@ -1,8 +1,8 @@
 import express from "express";
 import http from "http";
 import socketIo from "socket.io";
-import GameListNamespace from "./namespaces/gameList";
-import GameNamespace from "./namespaces/game";
+import GameListNamespace from "./namespaces/gameList/gameList";
+import GameNamespace from "./namespaces/game/game";
 import * as admin from "firebase-admin";
 
 const firebaseAccountKey = require("../config/firebaseAccountKey.json");
@@ -18,14 +18,19 @@ const io = socketIo(server);
 
 server.listen(3000);
 
+// add middleware to check authentication
 io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
   if (socket.handshake.query && socket.handshake.query.token) {
     admin
       .auth()
       .verifyIdToken(socket.handshake.query.token)
       .then(() => next())
-      .catch(() => next(new Error("Authentication error")));
+      .catch(() => {
+        console.log("Authentication error");
+        next(new Error("Authentication error"));
+      });
   } else {
+    console.log("Authentication error");
     next(new Error("Authentication error"));
   }
 });
