@@ -8,17 +8,18 @@ export default class RedisGame {
   client: any;
   pub: redis.RedisClient;
 
-  constructor() {
-    this.client = redis.createClient();
-    this.pub = this.client.duplicate();
+  constructor(mockClient?: any) {
+    this.client = mockClient || redis.createClient();
+    this.pub = mockClient || this.client.duplicate();
   }
 
   async createGame(
     socketId: string,
     user: { username: string; points: number },
-    timeMode: number
+    timeMode: number,
+    seededGameId?: string
   ) {
-    const gameId = uuidv4();
+    const gameId = seededGameId || uuidv4();
     const initialGame: IGame = this.getDefaultGame({
       gameId,
       timeMode: String(timeMode),
@@ -123,7 +124,7 @@ export default class RedisGame {
   }
 
   async endGame(gameId: string) {
-    const tempGame = await this.client.getGameById(gameId);
+    const tempGame = await this.getGameById(gameId);
     const updatedGame = this.getDefaultGame({
       gameId,
       timeMode: tempGame.timeMode,

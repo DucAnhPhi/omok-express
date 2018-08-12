@@ -7,9 +7,9 @@ export default class RedisGameList {
   client: any;
   sub: redis.RedisClient;
 
-  constructor() {
-    this.client = redis.createClient();
-    this.sub = this.client.duplicate();
+  constructor(mockClient?: any) {
+    this.client = mockClient || redis.createClient();
+    this.sub = mockClient || this.client.duplicate();
   }
 
   subscribeGameList() {

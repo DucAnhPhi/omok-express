@@ -19,10 +19,16 @@
   },
   "devDependencies": {
     "@types/bluebird": "^3.5.23",
+    "@types/chai": "^4.1.4",
     "@types/es6-shim": "^0.31.37",
     "@types/express": "^4.16.0",
+    "@types/mocha": "^5.2.5",
     "@types/redis": "^2.8.6",
+    "@types/redis-mock": "^0.17.0",
     "@types/socket.io": "^1.4.36",
-    "@types/uuid": "^3.4.3"
+    "@types/uuid": "^3.4.3",
+    "chai": "^4.1.2",
+    "mocha": "^5.2.0",
+    "redis-mock": "^0.29.0"
   }
 }
