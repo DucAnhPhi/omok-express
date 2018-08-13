@@ -23,3 +23,9 @@ export interface Profile {
 export interface Dictionary {
   [key: string]: string;
 }
+
+export interface Move {
+  x: number;
+  y: number;
+  isPlayer1: boolean;
+}

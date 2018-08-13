@@ -1,10 +1,6 @@
-interface Move {
-  x: number;
-  y: number;
-  isPlayer1: boolean;
-}
+import { Move } from "../models";
 
-export default class Game {
+export default class GameLogic {
   static convertToPositions(moves: string[]) {
     console.log("moves", moves);
     const boardPositions = Array(15)

@@ -1,6 +1,6 @@
 import socketIo from "socket.io";
 import { Profile, IGame } from "../../models";
-import Game from "../../lib/game";
+import GameLogic from "../../lib/gameLogic";
 import RedisGame from "./game.redis";
 
 export default class GameNamespace {
@@ -154,7 +154,7 @@ export default class GameNamespace {
           this.redis.changeTurn(params.gameId)
         ]).then(async () => {
           const moves = await this.redis.getMoves(params.gameId);
-          const boardPositions = Game.convertToPositions(moves);
+          const boardPositions = GameLogic.convertToPositions(moves);
           // emit updated board positions to players
           this.io
             .of("/game")
@@ -209,11 +209,11 @@ export default class GameNamespace {
           throw new Error("Invalid move: Not Player's turn");
         }
         // field already occupied
-        if (Game.checkFieldOccupied(moves, currentMove)) {
+        if (GameLogic.checkFieldOccupied(moves, currentMove)) {
           throw new Error("Invalid move: Field already occupied");
         }
       }
-      const boardPositions = Game.convertToPositions([
+      const boardPositions = GameLogic.convertToPositions([
         ...moves,
         JSON.stringify(currentMove)
       ]);
@@ -224,7 +224,7 @@ export default class GameNamespace {
           .in(params.gameId)
           .emit("updateBoard", boardPositions);
         // check for victory
-        if (Game.checkVictory(boardPositions)) {
+        if (GameLogic.checkVictory(boardPositions)) {
           this.redis.endGame(params.gameId).then(() => {
             this.io
               .of("/game")
