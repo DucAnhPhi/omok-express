@@ -5,8 +5,8 @@ import RedisGameList from "./gameList.redis";
 export default class GameListNamespace {
   redis: RedisGameList;
 
-  constructor(io: socketIo.Server) {
-    this.redis = new RedisGameList();
+  constructor(io: socketIo.Server, redisClient: any) {
+    this.redis = new RedisGameList(redisClient);
     io.of("gameList").on("connection", this.handleConnection.bind(this));
   }
 

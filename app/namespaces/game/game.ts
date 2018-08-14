@@ -7,8 +7,8 @@ export default class GameNamespace {
   io: socketIo.Server;
   redis: RedisGame;
 
-  constructor(io: socketIo.Server) {
-    this.redis = new RedisGame();
+  constructor(io: socketIo.Server, redisClient: any) {
+    this.redis = new RedisGame(redisClient);
     this.io = io;
     io.of("game").on("connection", this.handleConnection.bind(this));
   }

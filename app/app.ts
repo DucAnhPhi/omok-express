@@ -4,6 +4,10 @@ import socketIo from "socket.io";
 import GameListNamespace from "./namespaces/gameList/gameList";
 import GameNamespace from "./namespaces/game/game";
 import * as admin from "firebase-admin";
+import redis from "redis";
+import Bluebird from "bluebird";
+
+Bluebird.promisifyAll(redis);
 
 const firebaseAccountKey = require("../config/firebaseAccountKey.json");
 
@@ -15,6 +19,7 @@ admin.initializeApp({
 const app = express();
 const server = new http.Server(app);
 const io = socketIo(server);
+const redisClient = redis.createClient();
 
 server.listen(3000);
 
@@ -24,7 +29,10 @@ io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
     admin
       .auth()
       .verifyIdToken(socket.handshake.query.token)
-      .then(() => next())
+      .then((decodedToken) => {
+        console.log(decodedToken);
+        next();
+      })
       .catch(() => {
         console.log("Authentication error");
         next(new Error("Authentication error"));
@@ -35,5 +43,5 @@ io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
   }
 });
 
-const gameListNamespace = new GameListNamespace(io);
-const gameNamespace = new GameNamespace(io);
+const gameListNamespace = new GameListNamespace(io, redisClient);
+const gameNamespace = new GameNamespace(io, redisClient);

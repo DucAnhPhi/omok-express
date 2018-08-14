@@ -1,16 +1,14 @@
-import redis from "redis";
 import uuidv4 from "uuid/v4";
-import Bluebird from "bluebird";
 import { IGame, Dictionary } from "../../models";
-Bluebird.promisifyAll(redis);
 
 export default class RedisGame {
   client: any;
-  pub: redis.RedisClient;
+  pub: any;
 
-  constructor(mockClient?: any) {
-    this.client = mockClient || redis.createClient();
-    this.pub = mockClient || this.client.duplicate();
+  constructor(redisClient: any) {
+    this.client = redisClient;
+    // check if redisClient is a mock
+    this.pub = this.client.duplicate ? this.client.duplicate() : redisClient;
   }
 
   async createGame(
@@ -29,7 +27,7 @@ export default class RedisGame {
     });
     return Promise.all([
       this.updateGame(gameId, initialGame),
-      this.addSocketRef(socketId, gameId),
+      this.addGameRef(socketId, gameId),
       this.addToOpenGames(gameId)
     ]).then(() => {
       this.publishGameListChange("game created");
@@ -49,7 +47,7 @@ export default class RedisGame {
     console.log(game);
     return Promise.all([
       this.updateGame(gameId, game),
-      this.addSocketRef(socketId, gameId),
+      this.addGameRef(socketId, gameId),
       this.removeFromOpenGames(gameId)
     ]).then(() => {
       this.publishGameListChange("game matched");
@@ -244,7 +242,7 @@ export default class RedisGame {
     return this.client.hmsetAsync(gameId, game);
   }
 
-  addSocketRef(socketId: string, gameId: string) {
+  addGameRef(socketId: string, gameId: string) {
     return this.client.setAsync(socketId, gameId);
   }
 

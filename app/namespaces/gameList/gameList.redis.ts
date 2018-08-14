@@ -1,15 +1,13 @@
 import { IGame } from "../../models";
-import redis from "redis";
-import Bluebird from "bluebird";
-Bluebird.promisifyAll(redis);
 
 export default class RedisGameList {
   client: any;
-  sub: redis.RedisClient;
+  sub: any;
 
-  constructor(mockClient?: any) {
-    this.client = mockClient || redis.createClient();
-    this.sub = mockClient || this.client.duplicate();
+  constructor(redisClient: any) {
+    this.client = redisClient;
+    // check if redisClient is a mock
+    this.sub = this.client.duplicate ? this.client.duplicate() : redisClient;
   }
 
   subscribeGameList() {
