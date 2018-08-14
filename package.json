@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "express driven api for omok multiplayer game",
   "scripts": {
-    "start": "rm -rf build/ && tsc && node build/app.js"
+    "start": "rm -rf build/ && tsc && node build/app.js",
+    "test": "rm -rf build/ && tsc && mocha build/**/**/*.tests.js"
   },
   "author": "Duc Anh Phi",
   "license": "ISC",
