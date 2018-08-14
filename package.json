@@ -12,7 +12,6 @@
     "bluebird": "^3.5.1",
     "express": "^4.16.3",
     "firebase-admin": "^6.0.0",
-    "http": "0.0.0",
     "redis": "^2.8.0",
     "socket.io": "^2.1.1",
     "typescript": "^2.9.2",
