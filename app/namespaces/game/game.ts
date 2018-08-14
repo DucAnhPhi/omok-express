@@ -56,9 +56,12 @@ export default class GameNamespace {
     console.log("disconnected from game");
     this.redis.leaveGame(socket.id);
     // emit to opponent that player left
-    this.redis.getGameIdBySocketId(socket.id).then((gameId: string) => {
-      socket.to(gameId).emit("playerLeft");
-    });
+    this.redis
+      .getGameIdBySocketId(socket.id)
+      .then((gameId: string) => {
+        socket.to(gameId).emit("playerLeft");
+      })
+      .catch((e: any) => console.log("get gameId by socketId failed: ", e));
   }
 
   createGame(
@@ -70,7 +73,8 @@ export default class GameNamespace {
       .then((initialGame: IGame) => {
         socket.join(initialGame.gameId);
         socket.emit("gameCreated", initialGame);
-      });
+      })
+      .catch((e: any) => console.log("create game failed: ", e));
   }
 
   joinGame(params: { user: Profile; gameId: string }, socket: socketIo.Socket) {
@@ -83,48 +87,63 @@ export default class GameNamespace {
           .of("/game")
           .to(params.gameId)
           .emit("gameJoined", game);
-      });
+      })
+      .catch((e: any) => console.log("join game failed: ", e));
   }
 
   async handlePlayerReady(params: { gameId: string }, socket: socketIo.Socket) {
-    socket.in(params.gameId).emit("playerReady");
-    const isPlayer1 = await this.redis.checkIsPlayer1(socket.id, params.gameId);
-    const bothReady = await this.redis.checkPlayersReady(
-      params.gameId,
-      isPlayer1
-    );
-    if (bothReady) {
-      // start game
-      this.redis.startGame(params.gameId).then(() => {
-        console.log("gameStarted");
-        this.io
-          .of("game")
-          .in(params.gameId)
-          .emit("gameStarted");
-        if (isPlayer1) {
-          socket.emit("turn");
-        } else {
-          socket.in(params.gameId).emit("turn");
-        }
-      });
+    try {
+      socket.in(params.gameId).emit("playerReady");
+      const isPlayer1 = await this.redis.checkIsPlayer1(
+        socket.id,
+        params.gameId
+      );
+      const bothReady = await this.redis.checkPlayersReady(
+        params.gameId,
+        isPlayer1
+      );
+      if (bothReady) {
+        // start game
+        this.redis.startGame(params.gameId).then(() => {
+          console.log("gameStarted");
+          this.io
+            .of("game")
+            .in(params.gameId)
+            .emit("gameStarted");
+          if (isPlayer1) {
+            socket.emit("turn");
+          } else {
+            socket.in(params.gameId).emit("turn");
+          }
+        });
+      }
+    } catch (e) {
+      console.log("handle player ready failed: ", e);
     }
   }
 
   async tick(params: { gameId: string }, socket: socketIo.Socket) {
-    const isPlayer1 = await this.redis.checkIsPlayer1(socket.id, params.gameId);
-    const playerTime = await this.redis.tick(params.gameId, isPlayer1);
-    console.log(playerTime, isPlayer1);
-    this.io
-      .of("/game")
-      .to(params.gameId)
-      .emit("timeUpdated", { playerTime, isPlayer1 });
-    if (playerTime === 0) {
-      this.redis.endGame(params.gameId).then(() => {
-        this.io
-          .of("/game")
-          .in(params.gameId)
-          .emit("gameEnded", { victory: { isPlayer1: !isPlayer1 } });
-      });
+    try {
+      const isPlayer1 = await this.redis.checkIsPlayer1(
+        socket.id,
+        params.gameId
+      );
+      const playerTime = await this.redis.tick(params.gameId, isPlayer1);
+      console.log(playerTime, isPlayer1);
+      this.io
+        .of("/game")
+        .to(params.gameId)
+        .emit("timeUpdated", { playerTime, isPlayer1 });
+      if (playerTime === 0) {
+        this.redis.endGame(params.gameId).then(() => {
+          this.io
+            .of("/game")
+            .in(params.gameId)
+            .emit("gameEnded", { victory: { isPlayer1: !isPlayer1 } });
+        });
+      }
+    } catch (e) {
+      console.log("tick failed: ", e);
     }
   }
 
@@ -139,8 +158,8 @@ export default class GameNamespace {
     params: { gameId: string; type: "redo" | "draw" },
     socket: socketIo.Socket
   ) {
-    if (params.type === "redo") {
-      try {
+    try {
+      if (params.type === "redo") {
         const hasTurn = await this.redis.checkHasTurn(socket.id, params.gameId);
         if (!hasTurn) {
           throw new Error("Invalid redo. Offering Player still has turn.");
@@ -163,17 +182,17 @@ export default class GameNamespace {
           // emit next turn to opponent
           socket.in(params.gameId).emit("turn");
         });
-      } catch (e) {
-        console.log(e);
       }
-    }
-    if (params.type === "draw") {
-      this.redis.endGame(params.gameId).then(() => {
-        this.io
-          .of("/game")
-          .in(params.gameId)
-          .emit("gameEnded", { draw: true });
-      });
+      if (params.type === "draw") {
+        this.redis.endGame(params.gameId).then(() => {
+          this.io
+            .of("/game")
+            .in(params.gameId)
+            .emit("gameEnded", { draw: true });
+        });
+      }
+    } catch (e) {
+      console.log("handle offer accept failed: ", e);
     }
   }
 
@@ -239,7 +258,7 @@ export default class GameNamespace {
         }
       });
     } catch (e) {
-      console.log("Error", e);
+      console.log("move failed: ", e);
     }
   }
 }

@@ -41,7 +41,7 @@ export default class GameListNamespace {
       console.log("open games:", openGames);
       socket.emit("openGames", openGames);
     } catch (e) {
-      console.log("Error: could get open games:", e);
+      console.log("emit open games failed: ", e);
     }
   }
 }
