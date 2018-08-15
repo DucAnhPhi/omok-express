@@ -35,7 +35,7 @@ io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
       .auth()
       .verifyIdToken(socket.handshake.query.token)
       .then(decodedToken => {
-        console.log(decodedToken.uid);
+        // store uid for later usage in /game namespace
         redisClient.hsetAsync(`/game#${socket.id}`, "userId", decodedToken.uid);
         next();
       })

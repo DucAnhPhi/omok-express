@@ -11,7 +11,8 @@ export default class FirebaseFunctions {
       .doc(uid)
       .update({
         points
-      });
+      })
+      .catch(e => console.log(e));
   }
 
   getProfileById(uid: string) {
@@ -19,6 +20,7 @@ export default class FirebaseFunctions {
       .collection("profiles")
       .doc(uid)
       .get()
-      .then(doc => doc.data());
+      .then(doc => doc.data())
+      .catch(e => console.log(e));
   }
 }
