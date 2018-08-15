@@ -7,8 +7,8 @@ export default class GameNamespace {
   io: socketIo.Server;
   redis: RedisGame;
 
-  constructor(io: socketIo.Server, redisClient: any) {
-    this.redis = new RedisGame(redisClient);
+  constructor(io: socketIo.Server, redisClient: any, firebaseFunctions: any) {
+    this.redis = new RedisGame(redisClient, firebaseFunctions);
     this.io = io;
     io.of("game").on("connection", this.handleConnection.bind(this));
   }
@@ -17,11 +17,11 @@ export default class GameNamespace {
     console.log("connected to game");
     socket.on("disconnect", () => this.disconnect(socket));
 
-    socket.on("createGame", (params: { user: Profile; timeMode: number }) =>
+    socket.on("createGame", (params: { timeMode: number }) =>
       this.createGame(params, socket)
     );
 
-    socket.on("joinGame", (params: { user: Profile; gameId: string }) =>
+    socket.on("joinGame", (params: { gameId: string }) =>
       this.joinGame(params, socket)
     );
 
@@ -64,12 +64,9 @@ export default class GameNamespace {
       .catch((e: any) => console.log("get gameId by socketId failed: ", e));
   }
 
-  createGame(
-    params: { user: Profile; timeMode: number },
-    socket: socketIo.Socket
-  ) {
+  createGame(params: { timeMode: number }, socket: socketIo.Socket) {
     this.redis
-      .createGame(socket.id, params.user, params.timeMode)
+      .handleCreateGame(socket.id, params.timeMode)
       .then((initialGame: IGame) => {
         socket.join(initialGame.gameId);
         socket.emit("gameCreated", initialGame);
@@ -77,9 +74,9 @@ export default class GameNamespace {
       .catch((e: any) => console.log("create game failed: ", e));
   }
 
-  joinGame(params: { user: Profile; gameId: string }, socket: socketIo.Socket) {
+  joinGame(params: { gameId: string }, socket: socketIo.Socket) {
     this.redis
-      .joinGame(socket.id, params.user, params.gameId)
+      .handleJoinGame(socket.id, params.gameId)
       .then((game: IGame) => {
         console.log(params.gameId);
         socket.join(params.gameId);
@@ -135,12 +132,17 @@ export default class GameNamespace {
         .to(params.gameId)
         .emit("timeUpdated", { playerTime, isPlayer1 });
       if (playerTime === 0) {
-        this.redis.endGame(params.gameId).then(() => {
-          this.io
-            .of("/game")
-            .in(params.gameId)
-            .emit("gameEnded", { victory: { isPlayer1: !isPlayer1 } });
-        });
+        this.redis
+          .endGame(params.gameId, !isPlayer1)
+          .then((updatedGame: IGame) => {
+            this.io
+              .of("/game")
+              .in(params.gameId)
+              .emit("gameEnded", {
+                victory: { isPlayer1: !isPlayer1 },
+                updatedGame
+              });
+          });
       }
     } catch (e) {
       console.log("tick failed: ", e);
@@ -184,11 +186,11 @@ export default class GameNamespace {
         });
       }
       if (params.type === "draw") {
-        this.redis.endGame(params.gameId).then(() => {
+        this.redis.endGame(params.gameId, null).then(updatedGame => {
           this.io
             .of("/game")
             .in(params.gameId)
-            .emit("gameEnded", { draw: true });
+            .emit("gameEnded", { draw: true, updatedGame });
         });
       }
     } catch (e) {
@@ -244,11 +246,11 @@ export default class GameNamespace {
           .emit("updateBoard", boardPositions);
         // check for victory
         if (GameLogic.checkVictory(boardPositions)) {
-          this.redis.endGame(params.gameId).then(() => {
+          this.redis.endGame(params.gameId, isPlayer1).then(updatedGame => {
             this.io
               .of("/game")
               .in(params.gameId)
-              .emit("gameEnded", { victory: { isPlayer1 } });
+              .emit("gameEnded", { victory: { isPlayer1 }, updatedGame });
           });
         } else {
           this.redis.changeTurn(params.gameId).then(() => {

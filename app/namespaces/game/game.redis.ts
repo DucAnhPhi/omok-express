@@ -1,19 +1,30 @@
 import uuidv4 from "uuid/v4";
-import { IGame, Dictionary } from "../../models";
+import { IGame, Dictionary, Profile } from "../../models";
 
 export default class RedisGame {
   client: any;
   pub: any;
+  firebaseFunctions: any;
 
-  constructor(redisClient: any) {
+  constructor(redisClient: any, firebaseFunctions: any) {
     this.client = redisClient;
     // check if redisClient is a mock
     this.pub = this.client.duplicate ? this.client.duplicate() : redisClient;
+    this.firebaseFunctions = firebaseFunctions;
+  }
+
+  async handleCreateGame(socketId: string, timeMode: number) {
+    const uid = await this.client.hgetAsync(socketId, "userId");
+    console.log(uid);
+    const profile: Profile = await this.firebaseFunctions.getProfileById(uid);
+    console.log(profile);
+    return this.createGame(socketId, uid, profile, timeMode);
   }
 
   async createGame(
     socketId: string,
-    user: { username: string; points: number },
+    uid: string,
+    user: Profile,
     timeMode: number,
     seededGameId?: string
   ) {
@@ -22,6 +33,7 @@ export default class RedisGame {
       gameId,
       timeMode: String(timeMode),
       player1: socketId,
+      player1Uid: uid,
       player1Name: user.username,
       player1Points: String(user.points)
     });
@@ -35,13 +47,21 @@ export default class RedisGame {
     });
   }
 
+  async handleJoinGame(socketId: string, gameId: string) {
+    const uid = await this.client.hgetAsync(socketId, "userId");
+    const profile: Profile = await this.firebaseFunctions.getProfileById(uid);
+    return this.joinGame(socketId, uid, profile, gameId);
+  }
+
   async joinGame(
     socketId: string,
-    user: { username: string; points: number },
+    uid: string,
+    user: Profile,
     gameId: string
   ): Promise<IGame> {
     const game: IGame = await this.getGameById(gameId);
     game.player2 = socketId;
+    game.player2Uid = uid;
     game.player2Name = user.username;
     game.player2Points = `${user.points}`;
     console.log(game);
@@ -71,16 +91,35 @@ export default class RedisGame {
       this.client.delAsync(leavingGameId);
       this.deleteMoves(leavingGameId);
     } else {
+      let newPlayer1Points = leavingGame.player1Points;
+      let newPlayer2Points = leavingGame.player2Points;
+      if (leavingGame.playing === "true") {
+        // update points if player leaves while playing
+        newPlayer1Points = isPlayer1
+          ? `${parseInt(newPlayer1Points) - 30}`
+          : `${parseInt(newPlayer1Points) + 50}`;
+        newPlayer2Points = !isPlayer1
+          ? `${parseInt(newPlayer2Points) - 30}`
+          : `${parseInt(newPlayer2Points) + 50}`;
+        this.firebaseFunctions.updateProfilePoints(
+          leavingGame.player1Uid,
+          newPlayer1Points
+        );
+        this.firebaseFunctions.updateProfilePoints(
+          leavingGame.player2Uid,
+          newPlayer2Points
+        );
+      }
       // set whoever is left as player1 and clear player2
       const updatedGameProps = {
         player1: isPlayer1 ? leavingGame.player2 : leavingGame.player1,
+        player1Uid: isPlayer1 ? leavingGame.player2Uid : leavingGame.player1Uid,
         player1Name: isPlayer1
           ? leavingGame.player2Name
           : leavingGame.player1Name,
-        player1Points: isPlayer1
-          ? leavingGame.player2Points
-          : leavingGame.player1Points,
+        player1Points: isPlayer1 ? newPlayer2Points : newPlayer1Points,
         player2: "",
+        player2Uid: "",
         player2Name: "",
         player2Points: ""
       };
@@ -121,22 +160,46 @@ export default class RedisGame {
     return false;
   }
 
-  async endGame(gameId: string) {
+  async endGame(gameId: string, player1Win: boolean | null) {
     const tempGame = await this.getGameById(gameId);
+    let newP1Points: number = parseInt(tempGame.player1Points);
+    let newP2Points: number = parseInt(tempGame.player2Points);
+    if (player1Win === null) {
+      newP1Points += 10;
+      newP2Points += 10;
+    } else {
+      if (player1Win === true) {
+        newP1Points += 50;
+        newP2Points -= 30;
+      } else {
+        newP1Points -= 30;
+        newP2Points += 50;
+      }
+    }
+    this.firebaseFunctions.updateProfilePoints(
+      tempGame.player1Uid,
+      newP1Points
+    );
+    this.firebaseFunctions.updateProfilePoints(
+      tempGame.player2Uid,
+      newP2Points
+    );
     const updatedGame = this.getDefaultGame({
       gameId,
       timeMode: tempGame.timeMode,
       player1: tempGame.player1,
+      player1Uid: tempGame.player1Uid,
       player1Name: tempGame.player1Name,
-      player1Points: tempGame.player1Points,
+      player1Points: `${newP1Points}`,
       player2: tempGame.player2,
+      player2Uid: tempGame.player2Uid,
       player2Name: tempGame.player2Name,
-      player2Points: tempGame.player2Points
+      player2Points: `${newP2Points}`
     });
     return Promise.all([
       this.updateGame(gameId, updatedGame),
       this.deleteMoves(gameId)
-    ]);
+    ]).then(() => updatedGame);
   }
 
   async checkHasTurn(socketId: string, gameId: string) {
@@ -168,7 +231,7 @@ export default class RedisGame {
   }
 
   getGameIdBySocketId(socketId: string) {
-    return this.client.getAsync(socketId);
+    return this.client.hgetAsync(socketId, "gameId");
   }
 
   getMoves(gameId: string) {
@@ -201,9 +264,11 @@ export default class RedisGame {
     gameId: string;
     timeMode: string;
     player1?: string;
+    player1Uid?: string;
     player1Name?: string;
     player1Points?: string;
     player2?: string;
+    player2Uid?: string;
     player2Name?: string;
     player2Points?: string;
   }): IGame {
@@ -214,11 +279,13 @@ export default class RedisGame {
     };
     return {
       player1: options.player1 ? options.player1 : "",
+      player1Uid: options.player1Uid ? options.player1Uid : "",
       player1Name: options.player1Name ? options.player1Name : "",
       player1Points: options.player1Points ? options.player1Points : "",
       player1Ready: "false",
       player1Time: timeDict[options.timeMode],
       player2: options.player2 ? options.player2 : "",
+      player2Uid: options.player2Uid ? options.player2Uid : "",
       player2Name: options.player2Name ? options.player2Name : "",
       player2Points: options.player2Points ? options.player2Points : "",
       player2Ready: "false",
@@ -243,7 +310,7 @@ export default class RedisGame {
   }
 
   addGameRef(socketId: string, gameId: string) {
-    return this.client.setAsync(socketId, gameId);
+    return this.client.hsetAsync(socketId, "gameId", gameId);
   }
 
   publishGameListChange(message: string) {
