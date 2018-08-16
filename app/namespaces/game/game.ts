@@ -69,7 +69,7 @@ export default class GameNamespace {
       .handleCreateGame(socket.id, params.timeMode)
       .then((initialGame: IGame) => {
         socket.join(initialGame.gameId);
-        socket.emit("updateGame", initialGame);
+        socket.emit("updateGame", { gameProps: initialGame });
       })
       .catch((e: any) => console.log("create game failed: ", e));
   }
@@ -83,7 +83,7 @@ export default class GameNamespace {
         this.io
           .of("/game")
           .to(params.gameId)
-          .emit("updateGame", game);
+          .emit("updateGame", { gameProps: game });
       })
       .catch((e: any) => console.log("join game failed: ", e));
   }
@@ -97,7 +97,7 @@ export default class GameNamespace {
       const update = isPlayer1
         ? { player1Ready: "true" }
         : { player2Ready: "true" };
-      socket.in(params.gameId).emit("updateGame", update);
+      socket.in(params.gameId).emit("updateGame", { gameProps: update });
       const bothReady = await this.redis.checkPlayersReady(
         params.gameId,
         isPlayer1
@@ -106,13 +106,14 @@ export default class GameNamespace {
         // start game
         this.redis
           .startGame(params.gameId)
-          .then((update: { playing: "true" }) => {
+          .then(async (update: { playing: "true" }) => {
             console.log("gameStarted");
             this.io
               .of("game")
               .in(params.gameId)
-              .emit("updateGame", update);
-            if (isPlayer1) {
+              .emit("updateGame", { gameProps: update });
+            const player1Starts = await this.redis.getPlayer1Starts;
+            if (isPlayer1 && player1Starts) {
               socket.emit("turn");
             } else {
               socket.in(params.gameId).emit("turn");
@@ -138,7 +139,7 @@ export default class GameNamespace {
       this.io
         .of("/game")
         .to(params.gameId)
-        .emit("updateGame", update);
+        .emit("updateGame", { gameProps: update });
       if (playerTime === 0) {
         this.redis
           .endGame(params.gameId, !isPlayer1)
@@ -182,13 +183,12 @@ export default class GameNamespace {
           this.redis.undoRecentMove(params.gameId),
           this.redis.changeTurn(params.gameId)
         ]).then(async () => {
-          const moves = await this.redis.getMoves(params.gameId);
-          const boardPositions = GameLogic.convertToPositions(moves);
-          // emit updated board positions to players
+          const updatedMoves = moves.slice(0, -1);
+          // emit updated moves to players
           this.io
             .of("/game")
             .in(params.gameId)
-            .emit("updateBoard", boardPositions);
+            .emit("updateGame", { moves: updatedMoves });
           // emit next turn to opponent
           socket.in(params.gameId).emit("turn");
         });
@@ -242,16 +242,14 @@ export default class GameNamespace {
           throw new Error("Invalid move: Field already occupied");
         }
       }
-      const boardPositions = GameLogic.convertToPositions([
-        ...moves,
-        JSON.stringify(currentMove)
-      ]);
       this.redis.makeMove(params.gameId, currentMove).then(() => {
+        const updatedMoves = [...moves, JSON.stringify(currentMove)];
+        const boardPositions = GameLogic.convertToPositions(updatedMoves);
         // emit updated board positions to players
         this.io
           .of("/game")
           .in(params.gameId)
-          .emit("updateBoard", boardPositions);
+          .emit("updateGame", { moves: updatedMoves });
         // check for victory
         if (GameLogic.checkVictory(boardPositions)) {
           this.redis.endGame(params.gameId, isPlayer1).then(updatedGame => {

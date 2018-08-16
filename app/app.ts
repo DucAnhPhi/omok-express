@@ -36,8 +36,13 @@ io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
       .verifyIdToken(socket.handshake.query.token)
       .then(decodedToken => {
         // store uid for later usage in /game namespace
-        redisClient.hsetAsync(`/game#${socket.id}`, "userId", decodedToken.uid);
-        next();
+        redisClient
+          .hsetAsync(`/game#${socket.id}`, "userId", decodedToken.uid)
+          .then(() => next())
+          .catch((e: any) => {
+            console.log("Internal server error: ", e);
+            next(new Error("Internal server error"));
+          });
       })
       .catch(() => {
         console.log("Authentication error");

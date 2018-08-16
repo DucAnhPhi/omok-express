@@ -324,4 +324,8 @@ export default class RedisGame {
   deleteMoves(gameId: string) {
     return this.client.delAsync(`${gameId}moves`);
   }
+
+  getPlayer1Starts(gameId: string) {
+    return this.client.hgetAsync(gameId, "player1Starts");
+  }
 }
