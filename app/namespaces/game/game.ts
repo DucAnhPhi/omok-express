@@ -104,18 +104,20 @@ export default class GameNamespace {
       );
       if (bothReady) {
         // start game
-        this.redis.startGame(params.gameId).then(() => {
-          console.log("gameStarted");
-          this.io
-            .of("game")
-            .in(params.gameId)
-            .emit("gameStarted");
-          if (isPlayer1) {
-            socket.emit("turn");
-          } else {
-            socket.in(params.gameId).emit("turn");
-          }
-        });
+        this.redis
+          .startGame(params.gameId)
+          .then((update: { playing: "true" }) => {
+            console.log("gameStarted");
+            this.io
+              .of("game")
+              .in(params.gameId)
+              .emit("updateGame", update);
+            if (isPlayer1) {
+              socket.emit("turn");
+            } else {
+              socket.in(params.gameId).emit("turn");
+            }
+          });
       }
     } catch (e) {
       console.log("handle player ready failed: ", e);
@@ -130,10 +132,13 @@ export default class GameNamespace {
       );
       const playerTime = await this.redis.tick(params.gameId, isPlayer1);
       console.log(playerTime, isPlayer1);
+      const update = isPlayer1
+        ? { player1Time: playerTime }
+        : { player2Time: playerTime };
       this.io
         .of("/game")
         .to(params.gameId)
-        .emit("timeUpdated", { playerTime, isPlayer1 });
+        .emit("updateGame", update);
       if (playerTime === 0) {
         this.redis
           .endGame(params.gameId, !isPlayer1)

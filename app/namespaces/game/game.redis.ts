@@ -254,7 +254,9 @@ export default class RedisGame {
   }
 
   startGame(gameId: string) {
-    return this.client.hsetAsync(gameId, "playing", true);
+    return this.client
+      .hsetAsync(gameId, "playing", true)
+      .then(() => ({ playing: "true" }));
   }
 
   undoRecentMove(gameId: string) {
