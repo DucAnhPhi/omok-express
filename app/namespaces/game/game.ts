@@ -69,7 +69,7 @@ export default class GameNamespace {
       .handleCreateGame(socket.id, params.timeMode)
       .then((initialGame: IGame) => {
         socket.join(initialGame.gameId);
-        socket.emit("gameCreated", initialGame);
+        socket.emit("updateGame", initialGame);
       })
       .catch((e: any) => console.log("create game failed: ", e));
   }
@@ -83,7 +83,7 @@ export default class GameNamespace {
         this.io
           .of("/game")
           .to(params.gameId)
-          .emit("gameJoined", game);
+          .emit("updateGame", game);
       })
       .catch((e: any) => console.log("join game failed: ", e));
   }
