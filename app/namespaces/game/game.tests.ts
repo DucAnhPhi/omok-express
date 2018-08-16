@@ -47,6 +47,7 @@ describe("createGame()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "gameId123"
     };
 
@@ -88,6 +89,7 @@ describe("joinGame()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "gameId123"
     };
 
@@ -147,6 +149,7 @@ describe("leaveGame()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "gameId123"
     };
 
@@ -186,6 +189,7 @@ describe("leaveGame()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "gameId123"
     };
 
@@ -222,6 +226,7 @@ describe("leaveGame()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "gameId123"
     };
 
@@ -263,7 +268,8 @@ describe("endGame()", () => {
       player2Time: "300",
       timeMode: "5",
       playing: "false",
-      player1HasTurn: "true",
+      player1HasTurn: "false",
+      player1Starts: "false",
       gameId: "gameId123"
     };
 
@@ -271,5 +277,95 @@ describe("endGame()", () => {
     expect(actualOpenGames).to.deep.equal([]);
     expect(actualSocketRef).to.equal(seededGameId);
     expect(actualGameMoves).to.deep.equal([]);
+  });
+
+  it("should switch first turn correctly", async () => {
+    const mockClient: any = redis.createClient();
+    const gameRedis = new RedisGame(mockClient, firebaseFunctions);
+
+    await gameRedis.createGame(socketId1, uid1, user1, timeMode, seededGameId);
+    await gameRedis.joinGame(socketId2, uid2, user2, seededGameId);
+    await gameRedis.checkPlayersReady(seededGameId, true);
+    await gameRedis.checkPlayersReady(seededGameId, false);
+    await gameRedis.startGame(seededGameId);
+    await gameRedis.endGame(seededGameId, true);
+
+    const actualGame = await mockClient.hgetallAsync(seededGameId);
+
+    const expectedGame: IGame = {
+      player1: "socketId1",
+      player1Uid: "uid1",
+      player1Name: "duc",
+      player1Points: "1550",
+      player1Ready: "false",
+      player1Time: "300",
+      player2: "socketId2",
+      player2Uid: "uid2",
+      player2Name: "david",
+      player2Points: "1370",
+      player2Ready: "false",
+      player2Time: "300",
+      timeMode: "5",
+      playing: "false",
+      player1HasTurn: "false",
+      player1Starts: "false",
+      gameId: "gameId123"
+    };
+
+    expect(actualGame).to.deep.equal(expectedGame);
+
+    await gameRedis.startGame(seededGameId);
+    await gameRedis.endGame(seededGameId, true);
+
+    const actualGame2 = await mockClient.hgetallAsync(seededGameId);
+
+    const expectedGame2: IGame = {
+      player1: "socketId1",
+      player1Uid: "uid1",
+      player1Name: "duc",
+      player1Points: "1600",
+      player1Ready: "false",
+      player1Time: "300",
+      player2: "socketId2",
+      player2Uid: "uid2",
+      player2Name: "david",
+      player2Points: "1340",
+      player2Ready: "false",
+      player2Time: "300",
+      timeMode: "5",
+      playing: "false",
+      player1HasTurn: "true",
+      player1Starts: "true",
+      gameId: "gameId123"
+    };
+
+    expect(actualGame2).to.deep.equal(expectedGame2);
+
+    await gameRedis.startGame(seededGameId);
+    await gameRedis.endGame(seededGameId, true);
+
+    const actualGame3 = await mockClient.hgetallAsync(seededGameId);
+
+    const expectedGame3: IGame = {
+      player1: "socketId1",
+      player1Uid: "uid1",
+      player1Name: "duc",
+      player1Points: "1650",
+      player1Ready: "false",
+      player1Time: "300",
+      player2: "socketId2",
+      player2Uid: "uid2",
+      player2Name: "david",
+      player2Points: "1310",
+      player2Ready: "false",
+      player2Time: "300",
+      timeMode: "5",
+      playing: "false",
+      player1HasTurn: "false",
+      player1Starts: "false",
+      gameId: "gameId123"
+    };
+
+    expect(actualGame3).to.deep.equal(expectedGame3);
   });
 });

@@ -194,7 +194,8 @@ export default class RedisGame {
       player2: tempGame.player2,
       player2Uid: tempGame.player2Uid,
       player2Name: tempGame.player2Name,
-      player2Points: `${newP2Points}`
+      player2Points: `${newP2Points}`,
+      player1Starts: tempGame.player1Starts === "true" ? "false" : "true"
     });
     return Promise.all([
       this.updateGame(gameId, updatedGame),
@@ -271,11 +272,11 @@ export default class RedisGame {
     player2Uid?: string;
     player2Name?: string;
     player2Points?: string;
+    player1Starts?: "true" | "false";
   }): IGame {
     const timeDict: Dictionary = {
-      "5": "300",
-      "10": "600",
-      "15": "900"
+      "1": "60",
+      "5": "300"
     };
     return {
       player1: options.player1 ? options.player1 : "",
@@ -292,7 +293,8 @@ export default class RedisGame {
       player2Time: timeDict[options.timeMode],
       timeMode: options.timeMode,
       playing: "false",
-      player1HasTurn: "true",
+      player1HasTurn: options.player1Starts ? options.player1Starts : "true",
+      player1Starts: options.player1Starts ? options.player1Starts : "true",
       gameId: options.gameId
     };
   }

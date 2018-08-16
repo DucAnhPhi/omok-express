@@ -14,6 +14,7 @@ export interface IGame {
   timeMode: string;
   playing: "false" | "true";
   player1HasTurn: "false" | "true";
+  player1Starts: "false" | "true";
   gameId: string;
 }
 

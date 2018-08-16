@@ -52,6 +52,7 @@ describe("getOpenGames()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "seededGameId1"
     };
 
@@ -71,6 +72,7 @@ describe("getOpenGames()", () => {
       timeMode: "5",
       playing: "false",
       player1HasTurn: "true",
+      player1Starts: "true",
       gameId: "seededGameId2"
     };
 
