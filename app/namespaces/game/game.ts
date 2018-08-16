@@ -90,11 +90,14 @@ export default class GameNamespace {
 
   async handlePlayerReady(params: { gameId: string }, socket: socketIo.Socket) {
     try {
-      socket.in(params.gameId).emit("playerReady");
       const isPlayer1 = await this.redis.checkIsPlayer1(
         socket.id,
         params.gameId
       );
+      const update = isPlayer1
+        ? { player1Ready: "true" }
+        : { player2Ready: "true" };
+      socket.in(params.gameId).emit("updateGame", update);
       const bothReady = await this.redis.checkPlayersReady(
         params.gameId,
         isPlayer1
