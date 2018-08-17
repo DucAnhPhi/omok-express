@@ -104,22 +104,26 @@ export default class GameNamespace {
       );
       if (bothReady) {
         // start game
-        this.redis
-          .startGame(params.gameId)
-          .then(async (update: { playing: "true" }) => {
-            console.log("gameStarted");
-            this.io
-              .of("game")
-              .in(params.gameId)
-              .emit("updateGame", { gameProps: update });
-            const player1Starts =
-              (await this.redis.getPlayer1Starts(params.gameId)) === "true";
-            if (isPlayer1 === player1Starts) {
-              socket.emit("turn");
-            } else {
-              socket.in(params.gameId).emit("turn");
-            }
-          });
+        this.redis.startGame(params.gameId).then(async () => {
+          console.log("gameStarted");
+          this.io
+            .of("game")
+            .in(params.gameId)
+            .emit("updateGame", {
+              gameProps: {
+                playing: true,
+                player1Ready: false,
+                player2Ready: false
+              }
+            });
+          const player1Starts =
+            (await this.redis.getPlayer1Starts(params.gameId)) === "true";
+          if (isPlayer1 === player1Starts) {
+            socket.emit("turn");
+          } else {
+            socket.in(params.gameId).emit("turn");
+          }
+        });
       }
     } catch (e) {
       console.log("handle player ready failed: ", e);

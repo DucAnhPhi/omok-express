@@ -229,7 +229,7 @@ export default class RedisGame {
     return false;
   }
 
-  async tick(gameId: string, isPlayer1: boolean) {
+  async tick(gameId: string, isPlayer1: boolean): Promise<number> {
     if (isPlayer1) {
       return this.client.hincrbyAsync(gameId, "player1Time", -1);
     } else {
@@ -260,9 +260,7 @@ export default class RedisGame {
   }
 
   startGame(gameId: string) {
-    return this.client
-      .hsetAsync(gameId, "playing", true)
-      .then(() => ({ playing: "true" }));
+    return this.client.hsetAsync(gameId, "playing", true);
   }
 
   undoRecentMove(gameId: string) {
