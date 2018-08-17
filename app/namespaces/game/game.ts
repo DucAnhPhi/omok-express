@@ -1,5 +1,5 @@
 import socketIo from "socket.io";
-import { Profile, IGame } from "../../interfaces";
+import { IGame, IMove, convertRedisMovesToIMoves } from "../../interfaces";
 import GameLogic from "../../lib/gameLogic";
 import RedisGame from "./game.redis";
 
@@ -176,7 +176,9 @@ export default class GameNamespace {
         if (!hasTurn) {
           throw new Error("Invalid redo. Offering Player still has turn.");
         }
-        const moves = await this.redis.getMoves(params.gameId);
+        const moves: IMove[] = convertRedisMovesToIMoves(
+          await this.redis.getMoves(params.gameId)
+        );
         if (moves.length === 0) {
           throw new Error("Invalid redo. No moves made yet.");
         }
@@ -217,7 +219,9 @@ export default class GameNamespace {
         socket.id,
         params.gameId
       );
-      const moves = await this.redis.getMoves(params.gameId);
+      const moves: IMove[] = convertRedisMovesToIMoves(
+        await this.redis.getMoves(params.gameId)
+      );
       const currentMove = {
         x: params.position.x,
         y: params.position.y,
@@ -244,7 +248,7 @@ export default class GameNamespace {
         }
       }
       this.redis.makeMove(params.gameId, currentMove).then(() => {
-        const updatedMoves = [...moves, JSON.stringify(currentMove)];
+        const updatedMoves: IMove[] = [...moves, currentMove];
         const boardPositions = GameLogic.convertToPositions(updatedMoves);
         // emit updated board positions to players
         this.io

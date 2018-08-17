@@ -38,16 +38,20 @@ export interface IGame {
   gameId: string;
 }
 
-export interface Profile {
+export interface IProfile {
   username: string;
   points: number;
 }
 
-export interface Move {
+export interface IMove {
   x: number;
   y: number;
   isPlayer1: boolean;
 }
+
+export const convertRedisMovesToIMoves = (redisMoves: string[]): IMove[] => {
+  return redisMoves.map((moveStr: string) => JSON.parse(moveStr));
+};
 
 export const convertIRedisGameToIGame = (redisGame: IRedisGame): IGame => ({
   ...redisGame,

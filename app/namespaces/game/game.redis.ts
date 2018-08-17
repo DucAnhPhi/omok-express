@@ -1,5 +1,10 @@
 import uuidv4 from "uuid/v4";
-import { IGame, Profile, convertIRedisGameToIGame } from "../../interfaces";
+import {
+  IGame,
+  IProfile,
+  convertIRedisGameToIGame,
+  IRedisGame
+} from "../../interfaces";
 
 export default class RedisGame {
   client: any;
@@ -16,7 +21,7 @@ export default class RedisGame {
   async handleCreateGame(socketId: string, timeMode: number) {
     const uid = await this.client.hgetAsync(socketId, "userId");
     console.log(uid);
-    const profile: Profile = await this.firebaseFunctions.getProfileById(uid);
+    const profile: IProfile = await this.firebaseFunctions.getProfileById(uid);
     console.log(profile);
     return this.createGame(socketId, uid, profile, timeMode);
   }
@@ -24,7 +29,7 @@ export default class RedisGame {
   async createGame(
     socketId: string,
     uid: string,
-    user: Profile,
+    user: IProfile,
     timeMode: number,
     seededGameId?: string
   ) {
@@ -49,14 +54,14 @@ export default class RedisGame {
 
   async handleJoinGame(socketId: string, gameId: string) {
     const uid = await this.client.hgetAsync(socketId, "userId");
-    const profile: Profile = await this.firebaseFunctions.getProfileById(uid);
+    const profile: IProfile = await this.firebaseFunctions.getProfileById(uid);
     return this.joinGame(socketId, uid, profile, gameId);
   }
 
   async joinGame(
     socketId: string,
     uid: string,
-    user: Profile,
+    user: IProfile,
     gameId: string
   ): Promise<IGame> {
     const game: IGame = convertIRedisGameToIGame(
@@ -236,11 +241,11 @@ export default class RedisGame {
     return this.client.hgetAsync(socketId, "gameId");
   }
 
-  getMoves(gameId: string) {
+  getMoves(gameId: string): Promise<string[]> {
     return this.client.lrangeAsync(`${gameId}moves`, 0, -1);
   }
 
-  getGameById(gameId: string) {
+  getGameById(gameId: string): Promise<IRedisGame> {
     return this.client.hgetallAsync(gameId);
   }
 

@@ -1,13 +1,12 @@
-import { Move } from "../interfaces";
+import { IMove } from "../interfaces";
 
 export default class GameLogic {
-  static convertToPositions(moves: string[]) {
+  static convertToPositions(moves: IMove[]) {
     console.log("moves", moves);
     const boardPositions = Array(15)
       .fill(null)
       .map(() => Array(15).fill(null));
-    moves.map((moveStr: string) => {
-      const move: Move = JSON.parse(moveStr);
+    moves.map(move => {
       boardPositions[move.y][move.x] = move.isPlayer1;
     });
     return boardPositions;
@@ -81,9 +80,9 @@ export default class GameLogic {
     return inALine === 4;
   }
 
-  static checkFieldOccupied(moves: string[], currentMove: Move) {
+  static checkFieldOccupied(moves: IMove[], currentMove: IMove) {
     for (let i = 0; i < moves.length; i++) {
-      const move: Move = JSON.parse(moves[i]);
+      const move: IMove = moves[i];
       if (move.x === currentMove.x && move.y === currentMove.y) {
         return true;
       }
