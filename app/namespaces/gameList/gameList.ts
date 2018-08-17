@@ -1,12 +1,17 @@
 import socketIo from "socket.io";
 import { IGame } from "../../interfaces";
 import RedisGameList from "./gameList.redis";
+import FirebaseFunctions from "../../lib/firebaseFunctions";
 
 export default class GameListNamespace {
   redis: RedisGameList;
 
-  constructor(io: socketIo.Server, redisClient: any) {
-    this.redis = new RedisGameList(redisClient);
+  constructor(
+    io: socketIo.Server,
+    redisClient: any,
+    firebaseFunctions: FirebaseFunctions
+  ) {
+    this.redis = new RedisGameList(redisClient, firebaseFunctions);
     io.of("gameList").on("connection", this.handleConnection.bind(this));
   }
 
@@ -22,7 +27,9 @@ export default class GameListNamespace {
     });
 
     // handle disconnect from namespace
-    socket.on("disconnect", this.disconnect.bind(this));
+    socket.on("disconnect", () => {
+      this.disconnect(socket.id);
+    });
   }
 
   handleSubscription(
@@ -34,9 +41,13 @@ export default class GameListNamespace {
     this.emitOpenGames(socket);
   }
 
-  disconnect(): void {
+  disconnect(socketId: string): void {
     console.log("disconnected from gameList");
     this.redis.unsubscribeGameList();
+    this.redis.deleteGuest(socketId).then(() => {
+      console.log("guest deleted");
+      this.redis.deleteSocketRef(socketId);
+    });
   }
 
   async emitOpenGames(socket: socketIo.Socket): Promise<void> {

@@ -19,8 +19,9 @@ const firebaseApp = admin.initializeApp({
 
 const firestore = admin.firestore(firebaseApp);
 firestore.settings({ timestampsInSnapshots: true });
+const firebaseAuth = admin.auth(firebaseApp);
 
-const firebaseFunctions = new FirebaseFunctions(admin.firestore(firebaseApp));
+const firebaseFunctions = new FirebaseFunctions(firestore, firebaseAuth);
 const app = express();
 const server = new http.Server(app);
 const io = socketIo(server);
@@ -35,9 +36,18 @@ io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
       .auth()
       .verifyIdToken(socket.handshake.query.token)
       .then(decodedToken => {
-        // store uid for later usage in /game namespace
-        redisClient
-          .hsetAsync(`/game#${socket.id}`, "userId", decodedToken.uid)
+        // store user data for later usage in namespaces
+        Promise.all([
+          redisClient.hmsetAsync(`/gameList#${socket.id}`, {
+            isGuest: decodedToken.firebase.sign_in_provider === "anonymous",
+            userId: decodedToken.uid
+          }),
+          redisClient.hsetAsync(
+            `/game#${socket.id}`,
+            "userId",
+            decodedToken.uid
+          )
+        ])
           .then(() => next())
           .catch((e: any) => {
             console.log("Internal server error: ", e);
@@ -54,5 +64,9 @@ io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
   }
 });
 
-const gameListNamespace = new GameListNamespace(io, redisClient);
+const gameListNamespace = new GameListNamespace(
+  io,
+  redisClient,
+  firebaseFunctions
+);
 const gameNamespace = new GameNamespace(io, redisClient, firebaseFunctions);

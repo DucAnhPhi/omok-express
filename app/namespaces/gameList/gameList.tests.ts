@@ -22,14 +22,15 @@ const uid2 = "uid2";
 const seededGameId1 = "seededGameId1";
 const seededGameId2 = "seededGameId2";
 const firebaseFunctions = {
-  updateProfilePoints: (uid: string, points: number) => {}
+  updateProfilePoints: (uid: string, points: number) => {},
+  deleteGuest: (socketId: string) => {}
 };
 
 describe("getOpenGames()", () => {
   it("should return open games", async () => {
     const mockClient: any = redis.createClient();
     const gameRedis = new RedisGame(mockClient, firebaseFunctions);
-    const gameListRedis = new RedisGameList(mockClient);
+    const gameListRedis = new RedisGameList(mockClient, firebaseFunctions);
 
     await gameRedis.createGame(socketId1, uid1, user1, timeMode, seededGameId1);
     await gameRedis.createGame(socketId2, uid2, user2, timeMode, seededGameId2);
