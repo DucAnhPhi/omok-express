@@ -38,6 +38,37 @@ export interface IGame {
   gameId: string;
 }
 
+export interface IGameOptional {
+  player1?: string;
+  player1Uid?: string;
+  player1Name?: string;
+  player1Points?: number;
+  player1Ready?: boolean;
+  player1Time?: number;
+  player2?: string;
+  player2Uid?: string;
+  player2Name?: string;
+  player2Points?: number;
+  player2Ready?: boolean;
+  player2Time?: number;
+  timeMode?: number;
+  playing?: boolean;
+  player1HasTurn?: boolean;
+  player1Starts?: boolean;
+  gameId?: string;
+}
+
+export interface IUpdateGameParams {
+  gameProps?: IGameOptional;
+  moves?: IMove[];
+}
+
+export interface IGameEndedParams {
+  victory?: { isPlayer1: boolean };
+  draw?: boolean;
+  updatedGame: IGame;
+}
+
 export interface IProfile {
   username: string;
   points: number;

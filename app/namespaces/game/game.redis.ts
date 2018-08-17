@@ -3,7 +3,9 @@ import {
   IGame,
   IProfile,
   convertIRedisGameToIGame,
-  IRedisGame
+  IRedisGame,
+  convertRedisMovesToIMoves,
+  IMove
 } from "../../interfaces";
 
 export default class RedisGame {
@@ -18,7 +20,7 @@ export default class RedisGame {
     this.firebaseFunctions = firebaseFunctions;
   }
 
-  async handleCreateGame(socketId: string, timeMode: number) {
+  async handleCreateGame(socketId: string, timeMode: number): Promise<IGame> {
     const uid = await this.client.hgetAsync(socketId, "userId");
     console.log(uid);
     const profile: IProfile = await this.firebaseFunctions.getProfileById(uid);
@@ -32,7 +34,7 @@ export default class RedisGame {
     user: IProfile,
     timeMode: number,
     seededGameId?: string
-  ) {
+  ): Promise<IGame> {
     const gameId = seededGameId || uuidv4();
     const initialGame: IGame = this.getDefaultGame({
       gameId,
@@ -52,7 +54,7 @@ export default class RedisGame {
     });
   }
 
-  async handleJoinGame(socketId: string, gameId: string) {
+  async handleJoinGame(socketId: string, gameId: string): Promise<IGame> {
     const uid = await this.client.hgetAsync(socketId, "userId");
     const profile: IProfile = await this.firebaseFunctions.getProfileById(uid);
     return this.joinGame(socketId, uid, profile, gameId);
@@ -64,9 +66,7 @@ export default class RedisGame {
     user: IProfile,
     gameId: string
   ): Promise<IGame> {
-    const game: IGame = convertIRedisGameToIGame(
-      await this.getGameById(gameId)
-    );
+    const game: IGame = await this.getGameById(gameId);
     game.player2 = socketId;
     game.player2Uid = uid;
     game.player2Name = user.username;
@@ -81,15 +81,13 @@ export default class RedisGame {
     });
   }
 
-  async leaveGame(socketId: string) {
+  async leaveGame(socketId: string): Promise<void> {
     const leavingGameId: string = await this.getGameIdBySocketId(socketId);
     const isPlayer1: boolean = await this.checkIsPlayer1(
       socketId,
       leavingGameId
     );
-    const leavingGame: IGame = convertIRedisGameToIGame(
-      await this.getGameById(leavingGameId)
-    );
+    const leavingGame: IGame = await this.getGameById(leavingGameId);
     if (isPlayer1 && leavingGame.player2 === "") {
       // if last player leaves, delete game
       this.removeFromOpenGames(leavingGameId).then(async () => {
@@ -145,7 +143,10 @@ export default class RedisGame {
     this.client.delAsync(socketId);
   }
 
-  async checkPlayersReady(gameId: string, isPlayer1: boolean) {
+  async checkPlayersReady(
+    gameId: string,
+    isPlayer1: boolean
+  ): Promise<boolean> {
     const player1Ready = await this.client.hgetAsync(gameId, "player1Ready");
     const player2Ready = await this.client.hgetAsync(gameId, "player2Ready");
     if (isPlayer1) {
@@ -164,10 +165,8 @@ export default class RedisGame {
     return false;
   }
 
-  async endGame(gameId: string, player1Win: boolean | null) {
-    const tempGame: IGame = convertIRedisGameToIGame(
-      await this.getGameById(gameId)
-    );
+  async endGame(gameId: string, player1Win: boolean | null): Promise<IGame> {
+    const tempGame: IGame = await this.getGameById(gameId);
     let newP1Points: number = tempGame.player1Points;
     let newP2Points: number = tempGame.player2Points;
     if (player1Win === null) {
@@ -209,7 +208,7 @@ export default class RedisGame {
     ]).then(() => updatedGame);
   }
 
-  async checkHasTurn(socketId: string, gameId: string) {
+  async checkHasTurn(socketId: string, gameId: string): Promise<boolean> {
     const isPlayer1: boolean = await this.checkIsPlayer1(socketId, gameId);
     const player1HasTurnStr: "true" | "false" = await this.client.hgetAsync(
       gameId,
@@ -221,7 +220,7 @@ export default class RedisGame {
     return isPlayer1 === player1HasTurn;
   }
 
-  async checkIsPlayer1(socketId: string, gameId: string) {
+  async checkIsPlayer1(socketId: string, gameId: string): Promise<boolean> {
     const player1 = await this.client.hgetAsync(gameId, "player1");
     if (socketId === player1) {
       return true;
@@ -237,33 +236,40 @@ export default class RedisGame {
     }
   }
 
-  getGameIdBySocketId(socketId: string) {
+  getGameIdBySocketId(socketId: string): Promise<string> {
     return this.client.hgetAsync(socketId, "gameId");
   }
 
-  getMoves(gameId: string): Promise<string[]> {
-    return this.client.lrangeAsync(`${gameId}moves`, 0, -1);
+  getMoves(gameId: string): Promise<IMove[]> {
+    return this.client
+      .lrangeAsync(`${gameId}moves`, 0, -1)
+      .then((movesRedis: string[]) => convertRedisMovesToIMoves(movesRedis));
   }
 
-  getGameById(gameId: string): Promise<IRedisGame> {
-    return this.client.hgetallAsync(gameId);
+  getGameById(gameId: string): Promise<IGame> {
+    return this.client
+      .hgetallAsync(gameId)
+      .then((gameRedis: IRedisGame) => convertIRedisGameToIGame(gameRedis));
   }
 
-  makeMove(gameId: string, move: { x: number; y: number; isPlayer1: boolean }) {
+  makeMove(
+    gameId: string,
+    move: { x: number; y: number; isPlayer1: boolean }
+  ): Promise<void> {
     return this.client.rpushAsync(`${gameId}moves`, JSON.stringify(move));
   }
 
-  async changeTurn(gameId: string) {
+  async changeTurn(gameId: string): Promise<void> {
     let player1HasTurn = await this.client.hgetAsync(gameId, "player1HasTurn");
     player1HasTurn = player1HasTurn === "true" ? "false" : "true";
     return this.client.hsetAsync(gameId, "player1HasTurn", player1HasTurn);
   }
 
-  startGame(gameId: string) {
+  startGame(gameId: string): Promise<void> {
     return this.client.hsetAsync(gameId, "playing", true);
   }
 
-  undoRecentMove(gameId: string) {
+  undoRecentMove(gameId: string): Promise<void> {
     return this.client.rpopAsync(`${gameId}moves`);
   }
 
@@ -303,31 +309,33 @@ export default class RedisGame {
     };
   }
 
-  removeFromOpenGames(gameId: string) {
+  removeFromOpenGames(gameId: string): Promise<void> {
     return this.client.sremAsync("openGames", gameId);
   }
 
-  addToOpenGames(gameId: string) {
+  addToOpenGames(gameId: string): Promise<void> {
     return this.client.saddAsync("openGames", gameId);
   }
 
-  updateGame(gameId: string, game: IGame) {
+  updateGame(gameId: string, game: IGame): Promise<void> {
     return this.client.hmsetAsync(gameId, game);
   }
 
-  addGameRef(socketId: string, gameId: string) {
+  addGameRef(socketId: string, gameId: string): Promise<void> {
     return this.client.hsetAsync(socketId, "gameId", gameId);
   }
 
-  publishGameListChange(message: string) {
+  publishGameListChange(message: string): void {
     this.pub.publish("gameListChange", message);
   }
 
-  deleteMoves(gameId: string) {
+  deleteMoves(gameId: string): Promise<void> {
     return this.client.delAsync(`${gameId}moves`);
   }
 
-  getPlayer1Starts(gameId: string) {
-    return this.client.hgetAsync(gameId, "player1Starts");
+  getPlayer1Starts(gameId: string): boolean {
+    return this.client
+      .hgetAsync(gameId, "player1Starts")
+      .then((player1Starts: "true" | "false") => player1Starts === "true");
   }
 }

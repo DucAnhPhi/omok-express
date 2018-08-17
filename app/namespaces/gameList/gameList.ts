@@ -10,7 +10,7 @@ export default class GameListNamespace {
     io.of("gameList").on("connection", this.handleConnection.bind(this));
   }
 
-  handleConnection(socket: socketIo.Socket) {
+  handleConnection(socket: socketIo.Socket): void {
     console.log("connected to gameList");
     // initially send back open games
     this.emitOpenGames(socket);
@@ -25,17 +25,21 @@ export default class GameListNamespace {
     socket.on("disconnect", this.disconnect.bind(this));
   }
 
-  handleSubscription(channel: string, message: any, socket: socketIo.Socket) {
+  handleSubscription(
+    channel: string,
+    message: any,
+    socket: socketIo.Socket
+  ): void {
     console.log(message);
     this.emitOpenGames(socket);
   }
 
-  disconnect() {
+  disconnect(): void {
     console.log("disconnected from gameList");
     this.redis.unsubscribeGameList();
   }
 
-  async emitOpenGames(socket: socketIo.Socket) {
+  async emitOpenGames(socket: socketIo.Socket): Promise<void> {
     try {
       const openGames: IGame[] = await this.redis.getOpenGames();
       console.log("open games:", openGames);

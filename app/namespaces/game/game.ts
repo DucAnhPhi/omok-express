@@ -1,5 +1,10 @@
 import socketIo from "socket.io";
-import { IGame, IMove, convertRedisMovesToIMoves } from "../../interfaces";
+import {
+  IGame,
+  IMove,
+  IUpdateGameParams,
+  IGameEndedParams
+} from "../../interfaces";
 import GameLogic from "../../lib/gameLogic";
 import RedisGame from "./game.redis";
 
@@ -13,7 +18,7 @@ export default class GameNamespace {
     io.of("game").on("connection", this.handleConnection.bind(this));
   }
 
-  handleConnection(socket: socketIo.Socket) {
+  handleConnection(socket: socketIo.Socket): void {
     console.log("connected to game");
     socket.on("disconnect", () => this.disconnect(socket));
 
@@ -52,7 +57,7 @@ export default class GameNamespace {
     );
   }
 
-  disconnect(socket: socketIo.Socket) {
+  disconnect(socket: socketIo.Socket): void {
     console.log("disconnected from game");
     this.redis.leaveGame(socket.id);
     // emit to opponent that player left
@@ -64,60 +69,66 @@ export default class GameNamespace {
       .catch((e: any) => console.log("get gameId by socketId failed: ", e));
   }
 
-  createGame(params: { timeMode: number }, socket: socketIo.Socket) {
+  createGame(params: { timeMode: number }, socket: socketIo.Socket): void {
     this.redis
       .handleCreateGame(socket.id, params.timeMode)
       .then((initialGame: IGame) => {
         socket.join(initialGame.gameId);
-        socket.emit("updateGame", { gameProps: initialGame });
+        const update: IUpdateGameParams = { gameProps: initialGame };
+        socket.emit("updateGame", update);
       })
       .catch((e: any) => console.log("create game failed: ", e));
   }
 
-  joinGame(params: { gameId: string }, socket: socketIo.Socket) {
+  joinGame(params: { gameId: string }, socket: socketIo.Socket): void {
     this.redis
       .handleJoinGame(socket.id, params.gameId)
       .then((game: IGame) => {
-        console.log(params.gameId);
         socket.join(params.gameId);
+        const update: IUpdateGameParams = { gameProps: game };
         this.io
           .of("/game")
           .to(params.gameId)
-          .emit("updateGame", { gameProps: game });
+          .emit("updateGame", update);
       })
       .catch((e: any) => console.log("join game failed: ", e));
   }
 
-  async handlePlayerReady(params: { gameId: string }, socket: socketIo.Socket) {
+  async handlePlayerReady(
+    params: { gameId: string },
+    socket: socketIo.Socket
+  ): Promise<void> {
     try {
-      const isPlayer1 = await this.redis.checkIsPlayer1(
+      const isPlayer1: boolean = await this.redis.checkIsPlayer1(
         socket.id,
         params.gameId
       );
-      const update = isPlayer1
-        ? { player1Ready: "true" }
-        : { player2Ready: "true" };
-      socket.in(params.gameId).emit("updateGame", { gameProps: update });
-      const bothReady = await this.redis.checkPlayersReady(
+      const updatePlayerReady: IUpdateGameParams = {
+        gameProps: isPlayer1 ? { player1Ready: true } : { player2Ready: true }
+      };
+      socket.in(params.gameId).emit("updateGame", updatePlayerReady);
+      const bothReady: boolean = await this.redis.checkPlayersReady(
         params.gameId,
         isPlayer1
       );
       if (bothReady) {
         // start game
+        const updateBothReady: IUpdateGameParams = {
+          gameProps: {
+            playing: true,
+            player1Ready: false,
+            player2Ready: false
+          }
+        };
         this.redis.startGame(params.gameId).then(async () => {
           console.log("gameStarted");
           this.io
             .of("game")
             .in(params.gameId)
-            .emit("updateGame", {
-              gameProps: {
-                playing: true,
-                player1Ready: false,
-                player2Ready: false
-              }
-            });
-          const player1Starts =
-            (await this.redis.getPlayer1Starts(params.gameId)) === "true";
+            .emit("updateGame", updateBothReady);
+          const player1Starts: boolean = await this.redis.getPlayer1Starts(
+            params.gameId
+          );
           if (isPlayer1 === player1Starts) {
             socket.emit("turn");
           } else {
@@ -130,32 +141,41 @@ export default class GameNamespace {
     }
   }
 
-  async tick(params: { gameId: string }, socket: socketIo.Socket) {
+  async tick(
+    params: { gameId: string },
+    socket: socketIo.Socket
+  ): Promise<void> {
     try {
-      const isPlayer1 = await this.redis.checkIsPlayer1(
+      const isPlayer1: boolean = await this.redis.checkIsPlayer1(
         socket.id,
         params.gameId
       );
-      const playerTime = await this.redis.tick(params.gameId, isPlayer1);
+      const playerTime: number = await this.redis.tick(
+        params.gameId,
+        isPlayer1
+      );
       console.log(playerTime, isPlayer1);
-      const update = isPlayer1
-        ? { player1Time: playerTime }
-        : { player2Time: playerTime };
+      const update: IUpdateGameParams = {
+        gameProps: isPlayer1
+          ? { player1Time: playerTime }
+          : { player2Time: playerTime }
+      };
       this.io
         .of("/game")
         .to(params.gameId)
-        .emit("updateGame", { gameProps: update });
+        .emit("updateGame", update);
       if (playerTime === 0) {
         this.redis
           .endGame(params.gameId, !isPlayer1)
           .then((updatedGame: IGame) => {
+            const endParams: IGameEndedParams = {
+              victory: { isPlayer1: !isPlayer1 },
+              updatedGame
+            };
             this.io
               .of("/game")
               .in(params.gameId)
-              .emit("gameEnded", {
-                victory: { isPlayer1: !isPlayer1 },
-                updatedGame
-              });
+              .emit("gameEnded", endParams);
           });
       }
     } catch (e) {
@@ -166,23 +186,24 @@ export default class GameNamespace {
   offer(
     params: { gameId: string; type: "redo" | "draw" },
     socket: socketIo.Socket
-  ) {
+  ): void {
     socket.in(params.gameId).emit("offer", params.type);
   }
 
   async handleOfferAccepted(
     params: { gameId: string; type: "redo" | "draw" },
     socket: socketIo.Socket
-  ) {
+  ): Promise<void> {
     try {
       if (params.type === "redo") {
-        const hasTurn = await this.redis.checkHasTurn(socket.id, params.gameId);
+        const hasTurn: boolean = await this.redis.checkHasTurn(
+          socket.id,
+          params.gameId
+        );
         if (!hasTurn) {
           throw new Error("Invalid redo. Offering Player still has turn.");
         }
-        const moves: IMove[] = convertRedisMovesToIMoves(
-          await this.redis.getMoves(params.gameId)
-        );
+        const moves: IMove[] = await this.redis.getMoves(params.gameId);
         if (moves.length === 0) {
           throw new Error("Invalid redo. No moves made yet.");
         }
@@ -190,22 +211,26 @@ export default class GameNamespace {
           this.redis.undoRecentMove(params.gameId),
           this.redis.changeTurn(params.gameId)
         ]).then(async () => {
-          const updatedMoves = moves.slice(0, -1);
+          const updatedMoves: IMove[] = moves.slice(0, -1);
           // emit updated moves to players
+          const update: IUpdateGameParams = {
+            moves: updatedMoves
+          };
           this.io
             .of("/game")
             .in(params.gameId)
-            .emit("updateGame", { moves: updatedMoves });
+            .emit("updateGame", update);
           // emit next turn to opponent
           socket.in(params.gameId).emit("turn");
         });
       }
       if (params.type === "draw") {
-        this.redis.endGame(params.gameId, null).then(updatedGame => {
+        this.redis.endGame(params.gameId, null).then((updatedGame: IGame) => {
+          const endParams: IGameEndedParams = { draw: true, updatedGame };
           this.io
             .of("/game")
             .in(params.gameId)
-            .emit("gameEnded", { draw: true, updatedGame });
+            .emit("gameEnded", endParams);
         });
       }
     } catch (e) {
@@ -216,17 +241,15 @@ export default class GameNamespace {
   async move(
     params: { gameId: string; position: { x: number; y: number } },
     socket: socketIo.Socket
-  ) {
+  ): Promise<void> {
     try {
-      const game = await this.redis.getGameById(params.gameId);
-      const isPlayer1 = await this.redis.checkIsPlayer1(
+      const game: IGame = await this.redis.getGameById(params.gameId);
+      const isPlayer1: boolean = await this.redis.checkIsPlayer1(
         socket.id,
         params.gameId
       );
-      const moves: IMove[] = convertRedisMovesToIMoves(
-        await this.redis.getMoves(params.gameId)
-      );
-      const currentMove = {
+      const moves: IMove[] = await this.redis.getMoves(params.gameId);
+      const currentMove: IMove = {
         x: params.position.x,
         y: params.position.y,
         isPlayer1
@@ -237,13 +260,13 @@ export default class GameNamespace {
         throw new Error("Invalid move: Game does not exist");
       } else {
         // game haven't started or aleady terminated
-        if (game.playing === "false") {
+        if (!game.playing) {
           throw new Error(
             "Invalid move: Game has not started or already terminated"
           );
         }
         // not players turn
-        if (game.player1HasTurn !== `${isPlayer1}`) {
+        if (game.player1HasTurn !== isPlayer1) {
           throw new Error("Invalid move: Not Player's turn");
         }
         // field already occupied
@@ -255,18 +278,25 @@ export default class GameNamespace {
         const updatedMoves: IMove[] = [...moves, currentMove];
         const boardPositions = GameLogic.convertToPositions(updatedMoves);
         // emit updated board positions to players
+        const update: IUpdateGameParams = { moves: updatedMoves };
         this.io
           .of("/game")
           .in(params.gameId)
-          .emit("updateGame", { moves: updatedMoves });
+          .emit("updateGame", update);
         // check for victory
         if (GameLogic.checkVictory(boardPositions)) {
-          this.redis.endGame(params.gameId, isPlayer1).then(updatedGame => {
-            this.io
-              .of("/game")
-              .in(params.gameId)
-              .emit("gameEnded", { victory: { isPlayer1 }, updatedGame });
-          });
+          this.redis
+            .endGame(params.gameId, isPlayer1)
+            .then((updatedGame: IGame) => {
+              const endParams: IGameEndedParams = {
+                victory: { isPlayer1 },
+                updatedGame
+              };
+              this.io
+                .of("/game")
+                .in(params.gameId)
+                .emit("gameEnded", endParams);
+            });
         } else {
           this.redis.changeTurn(params.gameId).then(() => {
             // emit next turn to opponent
