@@ -1,5 +1,5 @@
 import socketIo from "socket.io";
-import { IGame } from "../../models";
+import { IGame } from "../../interfaces";
 import RedisGameList from "./gameList.redis";
 
 export default class GameListNamespace {

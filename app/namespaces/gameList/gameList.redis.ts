@@ -1,4 +1,4 @@
-import { IGame } from "../../models";
+import { IGame } from "../../interfaces";
 
 export default class RedisGameList {
   client: any;

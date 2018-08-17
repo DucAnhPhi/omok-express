@@ -1,4 +1,4 @@
-import { Move } from "../models";
+import { Move } from "../interfaces";
 
 export default class GameLogic {
   static convertToPositions(moves: string[]) {

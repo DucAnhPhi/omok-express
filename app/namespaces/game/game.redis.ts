@@ -1,5 +1,5 @@
 import uuidv4 from "uuid/v4";
-import { IGame, Dictionary, Profile } from "../../models";
+import { IGame, Profile, convertIRedisGameToIGame } from "../../interfaces";
 
 export default class RedisGame {
   client: any;
@@ -31,11 +31,11 @@ export default class RedisGame {
     const gameId = seededGameId || uuidv4();
     const initialGame: IGame = this.getDefaultGame({
       gameId,
-      timeMode: String(timeMode),
+      timeMode: timeMode,
       player1: socketId,
       player1Uid: uid,
       player1Name: user.username,
-      player1Points: String(user.points)
+      player1Points: user.points
     });
     return Promise.all([
       this.updateGame(gameId, initialGame),
@@ -59,12 +59,13 @@ export default class RedisGame {
     user: Profile,
     gameId: string
   ): Promise<IGame> {
-    const game: IGame = await this.getGameById(gameId);
+    const game: IGame = convertIRedisGameToIGame(
+      await this.getGameById(gameId)
+    );
     game.player2 = socketId;
     game.player2Uid = uid;
     game.player2Name = user.username;
-    game.player2Points = `${user.points}`;
-    console.log(game);
+    game.player2Points = user.points;
     return Promise.all([
       this.updateGame(gameId, game),
       this.addGameRef(socketId, gameId),
@@ -81,7 +82,9 @@ export default class RedisGame {
       socketId,
       leavingGameId
     );
-    const leavingGame: IGame = await this.getGameById(leavingGameId);
+    const leavingGame: IGame = convertIRedisGameToIGame(
+      await this.getGameById(leavingGameId)
+    );
     if (isPlayer1 && leavingGame.player2 === "") {
       // if last player leaves, delete game
       this.removeFromOpenGames(leavingGameId).then(async () => {
@@ -93,14 +96,14 @@ export default class RedisGame {
     } else {
       let newPlayer1Points = leavingGame.player1Points;
       let newPlayer2Points = leavingGame.player2Points;
-      if (leavingGame.playing === "true") {
+      if (leavingGame.playing) {
         // update points if player leaves while playing
         newPlayer1Points = isPlayer1
-          ? `${parseInt(newPlayer1Points) - 30}`
-          : `${parseInt(newPlayer1Points) + 50}`;
+          ? newPlayer1Points - 30
+          : newPlayer1Points + 50;
         newPlayer2Points = !isPlayer1
-          ? `${parseInt(newPlayer2Points) - 30}`
-          : `${parseInt(newPlayer2Points) + 50}`;
+          ? newPlayer2Points - 30
+          : newPlayer2Points + 50;
         this.firebaseFunctions.updateProfilePoints(
           leavingGame.player1Uid,
           newPlayer1Points
@@ -117,11 +120,7 @@ export default class RedisGame {
         player1Name: isPlayer1
           ? leavingGame.player2Name
           : leavingGame.player1Name,
-        player1Points: isPlayer1 ? newPlayer2Points : newPlayer1Points,
-        player2: "",
-        player2Uid: "",
-        player2Name: "",
-        player2Points: ""
+        player1Points: isPlayer1 ? newPlayer2Points : newPlayer1Points
       };
       const updatedGame = this.getDefaultGame({
         gameId: leavingGameId,
@@ -161,9 +160,11 @@ export default class RedisGame {
   }
 
   async endGame(gameId: string, player1Win: boolean | null) {
-    const tempGame = await this.getGameById(gameId);
-    let newP1Points: number = parseInt(tempGame.player1Points);
-    let newP2Points: number = parseInt(tempGame.player2Points);
+    const tempGame: IGame = convertIRedisGameToIGame(
+      await this.getGameById(gameId)
+    );
+    let newP1Points: number = tempGame.player1Points;
+    let newP2Points: number = tempGame.player2Points;
     if (player1Win === null) {
       newP1Points += 10;
       newP2Points += 10;
@@ -190,12 +191,12 @@ export default class RedisGame {
       player1: tempGame.player1,
       player1Uid: tempGame.player1Uid,
       player1Name: tempGame.player1Name,
-      player1Points: `${newP1Points}`,
+      player1Points: newP1Points,
       player2: tempGame.player2,
       player2Uid: tempGame.player2Uid,
       player2Name: tempGame.player2Name,
-      player2Points: `${newP2Points}`,
-      player1Starts: tempGame.player1Starts === "true" ? "false" : "true"
+      player2Points: newP2Points,
+      player1Starts: !tempGame.player1Starts
     });
     return Promise.all([
       this.updateGame(gameId, updatedGame),
@@ -265,38 +266,36 @@ export default class RedisGame {
 
   getDefaultGame(options: {
     gameId: string;
-    timeMode: string;
+    timeMode: number;
     player1?: string;
     player1Uid?: string;
     player1Name?: string;
-    player1Points?: string;
+    player1Points?: number;
     player2?: string;
     player2Uid?: string;
     player2Name?: string;
-    player2Points?: string;
-    player1Starts?: "true" | "false";
+    player2Points?: number;
+    player1Starts?: boolean;
   }): IGame {
-    const timeDict: Dictionary = {
-      "1": "60",
-      "5": "300"
-    };
     return {
       player1: options.player1 ? options.player1 : "",
       player1Uid: options.player1Uid ? options.player1Uid : "",
       player1Name: options.player1Name ? options.player1Name : "",
-      player1Points: options.player1Points ? options.player1Points : "",
-      player1Ready: "false",
-      player1Time: timeDict[options.timeMode],
+      player1Points: options.player1Points ? options.player1Points : 1500,
+      player1Ready: false,
+      player1Time: options.timeMode * 60,
       player2: options.player2 ? options.player2 : "",
       player2Uid: options.player2Uid ? options.player2Uid : "",
       player2Name: options.player2Name ? options.player2Name : "",
-      player2Points: options.player2Points ? options.player2Points : "",
-      player2Ready: "false",
-      player2Time: timeDict[options.timeMode],
+      player2Points: options.player2Points ? options.player2Points : 1500,
+      player2Ready: false,
+      player2Time: options.timeMode * 60,
       timeMode: options.timeMode,
-      playing: "false",
-      player1HasTurn: options.player1Starts ? options.player1Starts : "true",
-      player1Starts: options.player1Starts ? options.player1Starts : "true",
+      playing: false,
+      player1HasTurn:
+        options.player1Starts !== undefined ? options.player1Starts : true,
+      player1Starts:
+        options.player1Starts !== undefined ? options.player1Starts : true,
       gameId: options.gameId
     };
   }

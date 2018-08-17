@@ -1,5 +1,5 @@
 import socketIo from "socket.io";
-import { Profile, IGame } from "../../models";
+import { Profile, IGame } from "../../interfaces";
 import GameLogic from "../../lib/gameLogic";
 import RedisGame from "./game.redis";
 

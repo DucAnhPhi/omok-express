@@ -2,7 +2,7 @@ import { expect } from "chai";
 import redis from "redis-mock";
 import RedisGame from "./game.redis";
 import Bluebird from "bluebird";
-import { IGame } from "../../models";
+import { IRedisGame } from "../../interfaces";
 Bluebird.promisifyAll(redis);
 
 const user1 = {
@@ -31,7 +31,7 @@ describe("createGame()", () => {
 
     await gameRedis.createGame(socketId1, uid1, user1, timeMode, seededGameId);
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -41,7 +41,7 @@ describe("createGame()", () => {
       player2: "",
       player2Uid: "",
       player2Name: "",
-      player2Points: "",
+      player2Points: "1500",
       player2Ready: "false",
       player2Time: "300",
       timeMode: "5",
@@ -73,7 +73,7 @@ describe("joinGame()", () => {
     const actualSocketRef = await mockClient.hgetAsync(socketId2, "gameId");
     const actualOpenGames = await mockClient.smembersAsync("openGames");
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -133,7 +133,7 @@ describe("leaveGame()", () => {
     const actualSocketRef = await mockClient.hgetAsync(socketId1, "gameId");
     const actualGameMoves = await gameRedis.getMoves(seededGameId);
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId2",
       player1Uid: "uid2",
       player1Name: "david",
@@ -143,7 +143,7 @@ describe("leaveGame()", () => {
       player2: "",
       player2Uid: "",
       player2Name: "",
-      player2Points: "",
+      player2Points: "1500",
       player2Ready: "false",
       player2Time: "300",
       timeMode: "5",
@@ -173,7 +173,7 @@ describe("leaveGame()", () => {
     const actualSocketRef = await mockClient.getAsync(socketId2);
     const actualGameMoves = await gameRedis.getMoves(seededGameId);
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -183,7 +183,7 @@ describe("leaveGame()", () => {
       player2: "",
       player2Uid: "",
       player2Name: "",
-      player2Points: "",
+      player2Points: "1500",
       player2Ready: "false",
       player2Time: "300",
       timeMode: "5",
@@ -210,7 +210,7 @@ describe("leaveGame()", () => {
 
     const actualGame = await mockClient.hgetallAsync(seededGameId);
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -220,7 +220,7 @@ describe("leaveGame()", () => {
       player2: "",
       player2Uid: "",
       player2Name: "",
-      player2Points: "",
+      player2Points: "1500",
       player2Ready: "false",
       player2Time: "300",
       timeMode: "5",
@@ -253,7 +253,7 @@ describe("endGame()", () => {
     const actualSocketRef = await mockClient.hgetAsync(socketId2, "gameId");
     const actualGameMoves = await gameRedis.getMoves(seededGameId);
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -292,7 +292,7 @@ describe("endGame()", () => {
 
     const actualGame = await mockClient.hgetallAsync(seededGameId);
 
-    const expectedGame: IGame = {
+    const expectedGame: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -319,7 +319,7 @@ describe("endGame()", () => {
 
     const actualGame2 = await mockClient.hgetallAsync(seededGameId);
 
-    const expectedGame2: IGame = {
+    const expectedGame2: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -346,7 +346,7 @@ describe("endGame()", () => {
 
     const actualGame3 = await mockClient.hgetallAsync(seededGameId);
 
-    const expectedGame3: IGame = {
+    const expectedGame3: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",

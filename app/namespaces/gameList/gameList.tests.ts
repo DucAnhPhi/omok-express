@@ -2,7 +2,7 @@ import { expect } from "chai";
 import redis from "redis-mock";
 import RedisGameList from "./gameList.redis";
 import Bluebird from "bluebird";
-import { IGame } from "../../models";
+import { IRedisGame } from "../../interfaces";
 import RedisGame from "../game/game.redis";
 Bluebird.promisifyAll(redis);
 
@@ -36,7 +36,7 @@ describe("getOpenGames()", () => {
 
     const actualOpenGames = await gameListRedis.getOpenGames();
 
-    const expectedGame1: IGame = {
+    const expectedGame1: IRedisGame = {
       player1: "socketId1",
       player1Uid: "uid1",
       player1Name: "duc",
@@ -46,7 +46,7 @@ describe("getOpenGames()", () => {
       player2: "",
       player2Uid: "",
       player2Name: "",
-      player2Points: "",
+      player2Points: "1500",
       player2Ready: "false",
       player2Time: "300",
       timeMode: "5",
@@ -56,7 +56,7 @@ describe("getOpenGames()", () => {
       gameId: "seededGameId1"
     };
 
-    const expectedGame2: IGame = {
+    const expectedGame2: IRedisGame = {
       player1: "socketId2",
       player1Uid: "uid2",
       player1Name: "david",
@@ -66,7 +66,7 @@ describe("getOpenGames()", () => {
       player2: "",
       player2Uid: "",
       player2Name: "",
-      player2Points: "",
+      player2Points: "1500",
       player2Ready: "false",
       player2Time: "300",
       timeMode: "5",
