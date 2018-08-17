@@ -112,8 +112,9 @@ export default class GameNamespace {
               .of("game")
               .in(params.gameId)
               .emit("updateGame", { gameProps: update });
-            const player1Starts = await this.redis.getPlayer1Starts;
-            if (isPlayer1 && player1Starts) {
+            const player1Starts =
+              (await this.redis.getPlayer1Starts(params.gameId)) === "true";
+            if (isPlayer1 === player1Starts) {
               socket.emit("turn");
             } else {
               socket.in(params.gameId).emit("turn");
