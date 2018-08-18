@@ -44,10 +44,16 @@ export default class GameListNamespace {
   disconnect(socketId: string): void {
     console.log("disconnected from gameList");
     this.redis.unsubscribeGameList();
-    this.redis.deleteGuest(socketId).then(() => {
-      console.log("guest deleted");
-      this.redis.deleteSocketRef(socketId);
-    });
+    this.redis
+      .deleteGuest(socketId)
+      .then(() => {
+        console.log("guest deleted");
+        this.redis.deleteSocketRef(socketId);
+      })
+      .catch(e => {
+        console.log(e);
+        this.redis.deleteSocketRef(socketId);
+      });
   }
 
   async emitOpenGames(socket: socketIo.Socket): Promise<void> {
