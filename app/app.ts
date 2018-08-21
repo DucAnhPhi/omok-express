@@ -11,6 +11,7 @@ import FirebaseFunctions from "./lib/firebaseFunctions";
 Bluebird.promisifyAll(redis);
 
 const firebaseAccountKey = require("../config/firebaseAccountKey.json");
+const redisConfig = require('../config/redisConfig.json');
 
 const firebaseApp = admin.initializeApp({
   credential: admin.credential.cert(firebaseAccountKey),
@@ -25,7 +26,14 @@ const firebaseFunctions = new FirebaseFunctions(firestore, firebaseAuth);
 const app = express();
 const server = new http.Server(app);
 const io = socketIo(server);
-const redisClient: any = redis.createClient();
+const redisClient: any = redis.createClient(
+  redisConfig.redisPort || '6379',
+  redisConfig.redisHost || '127.0.0.1',
+  {
+    'auth_pass': redisConfig.redisKey,
+    'return_buffers': true
+  }
+).on('error', (err) => console.error('ERR:REDIS:', err));;
 const port = process.env.PORT || 3000;
 server.listen(port);
 
