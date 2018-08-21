@@ -22,9 +22,7 @@ export default class RedisGame {
 
   async handleCreateGame(socketId: string, timeMode: number): Promise<IGame> {
     const uid = await this.client.hgetAsync(socketId, "userId");
-    console.log(uid);
     const profile: IProfile = await this.firebaseFunctions.getProfileById(uid);
-    console.log(profile);
     return this.createGame(socketId, uid, profile, timeMode);
   }
 
@@ -214,8 +212,6 @@ export default class RedisGame {
       gameId,
       "player1HasTurn"
     );
-    console.log("isPlayer1", isPlayer1);
-    console.log("player1HasTurn", player1HasTurnStr);
     const player1HasTurn = player1HasTurnStr === "true";
     return isPlayer1 === player1HasTurn;
   }

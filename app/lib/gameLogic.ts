@@ -2,7 +2,6 @@ import { IMove } from "../interfaces";
 
 export default class GameLogic {
   static convertToPositions(moves: IMove[]) {
-    console.log("moves", moves);
     const boardPositions = Array(15)
       .fill(null)
       .map(() => Array(15).fill(null));
