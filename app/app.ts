@@ -26,8 +26,8 @@ const app = express();
 const server = new http.Server(app);
 const io = socketIo(server);
 const redisClient: any = redis.createClient();
-
-server.listen(3000);
+const port = process.env.PORT || 3000;
+server.listen(port);
 
 // add middleware to check authentication
 io.use((socket: socketIo.Socket, next: (err?: any) => void) => {
