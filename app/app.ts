@@ -7,11 +7,15 @@ import * as admin from "firebase-admin";
 import redis from "redis";
 import Bluebird from "bluebird";
 import FirebaseFunctions from "./lib/firebaseFunctions";
+import nconf from 'nconf';
 
 Bluebird.promisifyAll(redis);
 
 const firebaseAccountKey = require("../config/firebaseAccountKey.json");
-const redisConfig = require('../config/redisConfig.json');
+
+// Read in keys and secrets. Using nconf use can set secrets via
+// environment variables, command-line arguments, or a keys.json file.
+nconf.argv().env().file('./config/keys.json');
 
 const firebaseApp = admin.initializeApp({
   credential: admin.credential.cert(firebaseAccountKey),
@@ -27,13 +31,13 @@ const app = express();
 const server = new http.Server(app);
 const io = socketIo(server);
 const redisClient: any = redis.createClient(
-  redisConfig.redisPort || '6379',
-  redisConfig.redisHost || '127.0.0.1',
+  nconf.get('redisPort') || '6379',
+  nconf.get('redisHost') || '127.0.0.1',
   {
-    'auth_pass': redisConfig.redisKey,
+    'auth_pass': nconf.get('redisKey'),
     'return_buffers': true
   }
-).on('error', (err) => console.error('ERR:REDIS:', err));;
+).on('error', (err) => console.error('ERR:REDIS:', err));
 const port = process.env.PORT || 3000;
 server.listen(port);
 
