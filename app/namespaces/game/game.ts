@@ -57,7 +57,6 @@ export default class GameNamespace {
   }
 
   disconnect(socket: socketIo.Socket): void {
-    console.log("disconnected from game");
     this.redis.handleLeaveGame(socket.id);
     // emit to opponent that player left
     this.redis
@@ -120,7 +119,6 @@ export default class GameNamespace {
           }
         };
         this.redis.startGame(params.gameId).then(async () => {
-          console.log("gameStarted");
           this.io
             .of("game")
             .in(params.gameId)
@@ -153,7 +151,6 @@ export default class GameNamespace {
         params.gameId,
         isPlayer1
       );
-      console.log(playerTime, isPlayer1);
       const update: IUpdateGameParams = {
         gameProps: isPlayer1
           ? { player1Time: playerTime }
@@ -253,7 +250,6 @@ export default class GameNamespace {
         y: params.position.y,
         isPlayer1
       };
-      console.log("currentMove", currentMove);
       if (!game) {
         // game does not exists
         throw new Error("Invalid move: Game does not exist");
