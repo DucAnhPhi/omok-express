@@ -19,7 +19,6 @@ export default class GameNamespace {
   }
 
   handleConnection(socket: socketIo.Socket): void {
-    console.log("connected to game");
     socket.on("disconnect", () => this.disconnect(socket));
 
     socket.on("createGame", (params: { timeMode: number }) =>
