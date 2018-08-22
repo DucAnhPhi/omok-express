@@ -79,66 +79,96 @@ export default class RedisGame {
     });
   }
 
-  async leaveGame(socketId: string): Promise<void> {
-    const leavingGameId: string = await this.getGameIdBySocketId(socketId);
-    const isPlayer1: boolean = await this.checkIsPlayer1(
-      socketId,
-      leavingGameId
-    );
-    const leavingGame: IGame = await this.getGameById(leavingGameId);
-    if (isPlayer1 && leavingGame.player2 === "") {
-      // if last player leaves, delete game
-      this.removeFromOpenGames(leavingGameId).then(async () => {
-        this.publishGameListChange("game deleted");
-      });
-      // delete game in redis
-      this.client.delAsync(leavingGameId);
-      this.deleteMoves(leavingGameId);
-    } else {
-      let newPlayer1Points = leavingGame.player1Points;
-      let newPlayer2Points = leavingGame.player2Points;
-      if (leavingGame.playing) {
+  async handleLeaveGame(socketId: string): Promise<void> {
+    try {
+      const leavingGameId: string = await this.getGameIdBySocketId(socketId);
+      const isPlayer1: boolean = await this.checkIsPlayer1(
+        socketId,
+        leavingGameId
+      );
+      const leavingGame: IGame = await this.getGameById(leavingGameId);
+      if (isPlayer1 && leavingGame.player2 === "") {
+        // if last player leaves, delete game
+        this.deleteGame(leavingGameId);
+      } else {
+        let playerPoints: { player1Points: number; player2Points: number } = {
+          player1Points: leavingGame.player1Points,
+          player2Points: leavingGame.player2Points
+        };
         // update points if player leaves while playing
-        newPlayer1Points = isPlayer1
-          ? newPlayer1Points - 30
-          : newPlayer1Points + 50;
-        newPlayer2Points = !isPlayer1
-          ? newPlayer2Points - 30
-          : newPlayer2Points + 50;
-        this.firebaseFunctions.updateProfilePoints(
-          leavingGame.player1Uid,
-          newPlayer1Points
-        );
-        this.firebaseFunctions.updateProfilePoints(
-          leavingGame.player2Uid,
-          newPlayer2Points
-        );
+        if (leavingGame.playing) {
+          playerPoints = this.updatePoints(leavingGame, isPlayer1);
+        }
+        // set whoever is left as player1 and clear player2
+        this.setRemainingAsPlayer1(leavingGame, isPlayer1, playerPoints);
       }
-      // set whoever is left as player1 and clear player2
-      const updatedGameProps = {
-        player1: isPlayer1 ? leavingGame.player2 : leavingGame.player1,
-        player1Uid: isPlayer1 ? leavingGame.player2Uid : leavingGame.player1Uid,
-        player1Name: isPlayer1
-          ? leavingGame.player2Name
-          : leavingGame.player1Name,
-        player1Points: isPlayer1 ? newPlayer2Points : newPlayer1Points
-      };
-      const updatedGame = this.getDefaultGame({
-        gameId: leavingGameId,
-        timeMode: leavingGame.timeMode,
-        ...updatedGameProps
-      });
-      Promise.all([
-        this.updateGame(leavingGameId, updatedGame),
-        this.deleteMoves(leavingGameId)
-      ]).then(() => {
-        this.addToOpenGames(leavingGameId).then(() => {
-          this.publishGameListChange("player2 left");
-        });
-      });
+      // delete socket reference in redis
+      this.client.delAsync(socketId);
+    } catch (e) {
+      // delete socket reference in redis
+      this.client.delAsync(socketId);
+      console.log(e);
     }
-    // delete socket reference in redis
-    this.client.delAsync(socketId);
+  }
+
+  deleteGame(gameId: string): void {
+    this.removeFromOpenGames(gameId).then(() => {
+      this.publishGameListChange("game deleted");
+    });
+    // delete game in redis
+    this.client.delAsync(gameId);
+    this.deleteMoves(gameId);
+  }
+
+  updatePoints(
+    game: IGame,
+    isPlayer1: boolean
+  ): { player1Points: number; player2Points: number } {
+    let newPlayer1Points = game.player1Points;
+    let newPlayer2Points = game.player2Points;
+    newPlayer1Points = isPlayer1
+      ? newPlayer1Points - 30
+      : newPlayer1Points + 50;
+    newPlayer2Points = !isPlayer1
+      ? newPlayer2Points - 30
+      : newPlayer2Points + 50;
+    this.firebaseFunctions.updateProfilePoints(
+      game.player1Uid,
+      newPlayer1Points
+    );
+    this.firebaseFunctions.updateProfilePoints(
+      game.player2Uid,
+      newPlayer2Points
+    );
+    return { player1Points: newPlayer1Points, player2Points: newPlayer2Points };
+  }
+
+  setRemainingAsPlayer1(
+    game: IGame,
+    isPlayer1: boolean,
+    playerPoints: { player1Points: number; player2Points: number }
+  ): void {
+    const updatedGameProps = {
+      player1: isPlayer1 ? game.player2 : game.player1,
+      player1Uid: isPlayer1 ? game.player2Uid : game.player1Uid,
+      player1Name: isPlayer1 ? game.player2Name : game.player1Name,
+      player1Points: isPlayer1
+        ? playerPoints.player2Points
+        : playerPoints.player1Points
+    };
+    const updatedGame = this.getDefaultGame({
+      gameId: game.gameId,
+      timeMode: game.timeMode,
+      ...updatedGameProps
+    });
+    Promise.all([
+      this.updateGame(game.gameId, updatedGame),
+      this.deleteMoves(game.gameId)
+    ]).then(() => {
+      this.addToOpenGames(game.gameId).then(() => {
+        this.publishGameListChange("player2 left");
+      });
+    });
   }
 
   async checkPlayersReady(

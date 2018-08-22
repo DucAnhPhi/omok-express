@@ -58,7 +58,7 @@ export default class GameNamespace {
 
   disconnect(socket: socketIo.Socket): void {
     console.log("disconnected from game");
-    this.redis.leaveGame(socket.id);
+    this.redis.handleLeaveGame(socket.id);
     // emit to opponent that player left
     this.redis
       .getGameIdBySocketId(socket.id)
