@@ -32,7 +32,7 @@ const firebaseAuth = admin.auth(firebaseApp);
 const firebaseFunctions = new FirebaseFunctions(firestore, firebaseAuth);
 const app = express();
 const server = new http.Server(app);
-const io = socketIo(server);
+const io = socketIo(server, { path: '/api' });
 const redisClient: any = redis
   .createClient(
     nconf.get("redisPort") || "6379",
